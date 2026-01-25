@@ -1,97 +1,82 @@
 import { atom, map } from 'nanostores';
-import { INITIAL_PLAYERS, type GamePlayerState, type Position } from './players';
 
-// Initialize store with GamePlayerState
-const initialPlayerStates: Record<string, GamePlayerState> = Object.fromEntries(
-  INITIAL_PLAYERS.map(p => [
-    p.id, 
-    { ...p, isOnIce: p.position === 'G', totalTime: 0 }
-  ])
-);
+export type Position = 'F' | 'D' | 'G' | 'A';
 
-export const playersStore = map<Record<string, GamePlayerState>>(initialPlayerStates);
-export { type Position };
-export type Player = GamePlayerState;
+export interface Player {
+  id: string;
+  name: string;
+  number: string;
+  position: Position;
+  is_on_ice: boolean;
+  total_time: number;
+  last_shift_started?: number;
+}
 
+export const playersStore = map<Record<string, Player>>({});
 export const isPaused = atom(true);
-export const gameTime = atom(0); // Total game elapsed time in seconds
+export const lastServerUpdate = atom(0);
 
-export function togglePlayer(id: string) {
-  const players = playersStore.get();
-  const player = players[id];
-  if (!player) return;
-
-  const now = Date.now();
-  const newIsOnIce = !player.isOnIce;
-  
-  const updatedPlayer = { ...player, isOnIce: newIsOnIce };
-  
-  if (newIsOnIce) {
-    updatedPlayer.lastShiftStarted = now;
-  } else if (player.lastShiftStarted) {
-    const shiftDuration = Math.floor((now - player.lastShiftStarted) / 1000);
-    updatedPlayer.totalTime += shiftDuration;
-    updatedPlayer.lastShiftStarted = undefined;
-  }
-
-  playersStore.setKey(id, updatedPlayer);
-}
-
-export function toggleGlobalPause() {
-  const nextPaused = !isPaused.get();
-  isPaused.set(nextPaused);
-  
-  const now = Date.now();
-  const players = playersStore.get();
-  
-  // When pausing, update all on-ice players' total time
-  if (nextPaused) {
-    Object.values(players).forEach(player => {
-      if (player.isOnIce && player.lastShiftStarted) {
-        const shiftDuration = Math.floor((now - player.lastShiftStarted) / 1000);
-        playersStore.setKey(player.id, {
-          ...player,
-          totalTime: player.totalTime + shiftDuration,
-          lastShiftStarted: undefined
-        });
-      }
-    });
-  } else {
-    // When resuming, start a new shift for all on-ice players
-    Object.values(players).forEach(player => {
-      if (player.isOnIce) {
-        playersStore.setKey(player.id, {
-          ...player,
-          lastShiftStarted: now
-        });
-      }
-    });
+// Fetch state from server
+export async function syncWithServer() {
+  try {
+    const res = await fetch('/api/game');
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    // Update nanostores
+    const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, {
+      ...p,
+      is_on_ice: !!p.is_on_ice // Convert 0/1 to boolean
+    }]));
+    
+    playersStore.set(playersMap);
+    isPaused.set(!!data.gameState.is_paused);
+    lastServerUpdate.set(Date.now());
+  } catch (err) {
+    console.error('Failed to sync with server:', err);
   }
 }
 
-export function swapPosition(position: Position) {
-  const players = playersStore.get();
-  const now = Date.now();
-  const paused = isPaused.get();
-
-  Object.values(players).forEach(player => {
-    if (player.position === position) {
-      const wasOnIce = player.isOnIce;
-      const newIsOnIce = !wasOnIce;
-      
-      const updatedPlayer = { ...player, isOnIce: newIsOnIce };
-      
-      if (!paused) {
-        if (newIsOnIce) {
-          updatedPlayer.lastShiftStarted = now;
-        } else if (wasOnIce && player.lastShiftStarted) {
-          const shiftDuration = Math.floor((now - player.lastShiftStarted) / 1000);
-          updatedPlayer.totalTime += shiftDuration;
-          updatedPlayer.lastShiftStarted = undefined;
-        }
-      }
-      
-      playersStore.setKey(player.id, updatedPlayer);
-    }
+// Actions that push to server
+export async function togglePlayer(id: string, target?: boolean) {
+  await fetch('/api/game', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'toggle_player', payload: { id, target } })
   });
+  await syncWithServer();
 }
+
+export async function toggleGlobalPause(target?: boolean) {
+  await fetch('/api/game', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'toggle_pause', payload: { target } })
+  });
+  await syncWithServer();
+}
+
+export async function swapPosition(position: Position) {
+  await fetch('/api/game', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'swap', payload: { position } })
+  });
+  await syncWithServer();
+}
+
+export async function cyclePosition(id: string) {
+  await fetch('/api/game', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'cycle_position', payload: { id } })
+  });
+  await syncWithServer();
+}
+
+export async function resetGame() {
+  if (!confirm('Are you sure you want to reset all times and the clock?')) return;
+  await fetch('/api/game', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'reset_game' })
+  });
+  await syncWithServer();
+}
+
+export { type Position };

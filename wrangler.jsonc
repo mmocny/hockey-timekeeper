@@ -1,30 +1,23 @@
 {
 	"main": "dist/_worker.js/index.js",
 	"name": "hockey-timekeeper",
-  "compatibility_date": "2026-01-25",
-  "compatibility_flags": [
-    "nodejs_compat",
-    "global_fetch_strictly_public"
-  ],
+	"compatibility_date": "2026-01-25",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": "./dist"
 	},
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "hockey_db",
-      "database_id": "your-id-here",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "SESSION",
-      "id": "your-kv-id-here"
-    }
-  ],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "hockey_db",
+			"database_id": "6cb2e690-357e-4370-8088-6be68e012c3c"
+		}
+	],
 	"observability": {
-    "enabled": true
-  }
+		"enabled": true
+	}
 }
