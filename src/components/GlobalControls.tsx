@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '@nanostores/react';
-import { isPaused, toggleGlobalPause } from '../lib/store';
-import { Play, Pause } from 'lucide-react';
+import { isPaused, toggleGlobalPause, switchAll } from '../lib/store';
+import { Play, Pause, RefreshCcw } from 'lucide-react';
 
 export const GlobalControls: React.FC = () => {
   const paused = useStore(isPaused);
@@ -23,13 +23,20 @@ export const GlobalControls: React.FC = () => {
     toggleGlobalPause(!paused);
   };
 
+  const handleSwitchAll = async () => {
+    if (isLocked) return;
+    setIsLocked(true);
+    await switchAll();
+    setTimeout(() => setIsLocked(false), 800);
+  };
+
   return (
-    <div className="flex flex-col gap-4 mb-8">
+    <div className="flex gap-3 mb-6">
       {/* Master Game Clock Control */}
       <button
         onClick={handleToggle}
         disabled={isLocked}
-        className={`w-full py-6 rounded-2xl flex items-center justify-center gap-4 transition-all active:scale-[0.98] ${
+        className={`flex-1 py-6 rounded-2xl flex items-center justify-center gap-4 transition-all active:scale-[0.98] ${
           isLocked ? 'opacity-50 cursor-not-allowed grayscale' : ''
         } ${
           paused
@@ -40,14 +47,26 @@ export const GlobalControls: React.FC = () => {
         {paused ? (
           <>
             <Play className="w-8 h-8 fill-current" />
-            <span className="text-2xl font-black uppercase tracking-widest">Resume Game</span>
+            <span className="text-xl font-black uppercase tracking-widest leading-none">Resume</span>
           </>
         ) : (
           <>
             <Pause className="w-8 h-8 fill-current" />
-            <span className="text-2xl font-black uppercase tracking-widest">Pause (Whistle)</span>
+            <span className="text-xl font-black uppercase tracking-widest leading-none">Pause</span>
           </>
         )}
+      </button>
+
+      {/* Switch All Shifts */}
+      <button
+        onClick={handleSwitchAll}
+        disabled={isLocked}
+        className={`w-32 py-6 rounded-2xl flex flex-col items-center justify-center gap-2 transition-all active:scale-[0.98] border border-slate-800 bg-slate-900 hover:bg-slate-800 ${
+          isLocked ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
+      >
+        <RefreshCcw className="w-6 h-6 text-blue-400" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Switch All</span>
       </button>
     </div>
   );

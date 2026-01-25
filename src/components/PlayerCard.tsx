@@ -98,7 +98,7 @@ export const PlayerCard: React.FC<Props> = ({ playerId }) => {
         }
       }}
       onContextMenu={(e) => e.preventDefault()}
-      className={`relative w-full p-4 rounded-xl border-2 transition-all duration-200 text-left cursor-pointer select-none active:scale-95 ${
+      className={`relative w-full p-2.5 rounded-lg border-2 transition-all duration-200 text-left cursor-pointer select-none active:scale-95 ${
         isLocked ? 'ring-2 ring-amber-500/50 opacity-80' : ''
       } ${
         player.is_on_ice
@@ -106,15 +106,15 @@ export const PlayerCard: React.FC<Props> = ({ playerId }) => {
           : 'bg-slate-900 border-slate-700 opacity-90'
       }`}
     >
-      <div className="flex justify-between items-center mb-1">
-        <span className={`text-2xl font-black italic tracking-tighter ${
+      <div className="flex justify-between items-center mb-0.5">
+        <span className={`text-xl font-black italic tracking-tighter ${
           player.is_on_ice ? 'text-blue-100' : 'text-slate-600'
         }`}>
           {player.number}
         </span>
         <div 
-          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest border transition-all ${
-            isPressing ? 'scale-150 bg-blue-500 text-white shadow-lg' : ''
+          className={`px-1 py-0 rounded text-[9px] font-bold uppercase tracking-widest border transition-all ${
+            isPressing ? 'scale-125 bg-blue-500 text-white shadow-lg' : ''
           } ${
             player.is_on_ice ? 'bg-blue-400 text-blue-950 border-blue-300' : 'bg-slate-800 text-slate-400 border-slate-700'
           }`}
@@ -123,24 +123,24 @@ export const PlayerCard: React.FC<Props> = ({ playerId }) => {
         </div>
       </div>
       
-      <h3 className={`text-base font-bold truncate leading-tight ${
+      <h3 className={`text-[13px] font-bold truncate leading-tight mb-2 ${
         player.is_on_ice ? 'text-white' : 'text-slate-200'
       }`}>
         {player.name}
       </h3>
 
-      <div className="mt-4 flex justify-between items-end">
+      <div className="flex justify-between items-end">
         <div className="flex flex-col">
-          <span className="text-[10px] uppercase font-bold text-slate-500 mb-0.5">Shift</span>
-          <span className={`text-xl font-mono leading-none ${
+          <span className="text-[8px] uppercase font-bold text-slate-500 mb-0">Shift</span>
+          <span className={`text-sm font-mono leading-none ${
             player.is_on_ice ? 'text-white' : 'text-slate-400'
           }`}>
             {formatTime(currentShiftSeconds)}
           </span>
         </div>
         <div className="flex flex-col items-end">
-          <span className="text-[10px] uppercase font-bold text-slate-500 mb-0.5">Total</span>
-          <span className={`text-sm font-mono leading-none ${
+          <span className="text-[8px] uppercase font-bold text-slate-500 mb-0">Total</span>
+          <span className={`text-[11px] font-mono leading-none ${
             player.is_on_ice ? 'text-blue-200' : 'text-slate-400'
           }`}>
             {formatTime(totalTimeDisplay)}
