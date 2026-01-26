@@ -22,11 +22,7 @@ export async function syncWithServer() {
     if (!res.ok) return;
     const data = await res.json();
     
-    const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, {
-      ...p,
-      // Derived is_on_ice for UI convenience
-      is_on_ice: p.lane < 5 && p.queue_order === 0
-    }]));
+    const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, p]));
     
     playersStore.set(playersMap);
     isPaused.set(!!data.gameState.is_paused);

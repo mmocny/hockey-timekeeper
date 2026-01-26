@@ -1,8 +1,8 @@
-import React, { useEffect, useOptimistic, useTransition, use } from 'react';
+import React, { useEffect, useOptimistic, useTransition, use, ViewTransition } from 'react';
 import { useStore } from '@nanostores/react';
 import { playersStore, isPaused as isPausedStore, startPolling } from '../lib/client/store';
 import * as serverActions from '../lib/client/actions';
-import { PlayerCard } from './PlayerCard';
+import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { GlobalControls } from './GlobalControls';
 import { GameContext } from '../lib/client/context';
 import { LANE_NAMES, type Player } from '../lib/shared/types';
@@ -31,7 +31,7 @@ function playerReducer(state: Player[], action: PlayerAction): Player[] {
       
       const updatedPlayers = lanePlayers.map((p, idx) => {
         if (p.id === current.id) {
-          return { ...p, queue_order: maxOrder + 1, is_on_ice: false, last_shift_started: undefined };
+          return { ...p, queue_order: maxOrder + 1, last_shift_started: undefined };
         }
         // Shift up
         const newOrder = p.queue_order - 1;
@@ -39,7 +39,6 @@ function playerReducer(state: Player[], action: PlayerAction): Player[] {
         return { 
           ...p, 
           queue_order: newOrder, 
-          is_on_ice: isNowActive, 
           last_shift_started: isNowActive ? now : undefined 
         };
       });
@@ -58,10 +57,10 @@ function playerReducer(state: Player[], action: PlayerAction): Player[] {
       const { id, lane } = action;
       const targetLanePlayers = nextState.filter(p => p.lane === lane);
       const nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
-      return nextState.map(p => p.id === id ? { ...p, lane, queue_order: nextOrder, is_on_ice: false, last_shift_started: undefined } : p);
+      return nextState.map(p => p.id === id ? { ...p, lane, queue_order: nextOrder, last_shift_started: undefined } : p);
     }
     case 'reset_game': {
-      return nextState.map(p => ({ ...p, total_time: 0, is_on_ice: false, last_shift_started: undefined }));
+      return nextState.map(p => ({ ...p, total_time: 0, last_shift_started: undefined }));
     }
     default:
       return state;
@@ -71,7 +70,6 @@ function playerReducer(state: Player[], action: PlayerAction): Player[] {
 // --- Components ---
 
 const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
-  // Read from Context using React 19 'use' API
   const { players, actions } = use(GameContext)!;
 
   const lanePlayers = players
@@ -83,25 +81,44 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
   const tail = lanePlayers.slice(2);
 
   return (
-    <div className="py-2 border-b border-slate-900 last:border-0">
+    <div 
+      onClick={() => actions.switchLane(laneIdx)}
+      className="py-2 border-b border-slate-900 last:border-0 cursor-pointer"
+    >
       <div className="flex items-center gap-2 mb-1.5 px-1">
         <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{LANE_NAMES[laneIdx]}</span>
         <div className="h-px bg-slate-900 flex-1"></div>
       </div>
 
       <div className="flex items-center gap-2 min-h-[44px] px-1">
-        <div className="w-28 shrink-0" onClick={() => actions.switchLane(laneIdx)}>
-          {onIce ? <PlayerCard player={{...onIce, is_on_ice: true}} /> : <div className="w-28 h-11 rounded border border-dashed border-slate-800 flex items-center justify-center text-[9px] text-slate-700 font-bold uppercase">Empty</div>}
+        <div className="w-28 shrink-0">
+          {onIce ? (
+            <ActivePlayerCard key={onIce.id} player={onIce} />
+          ) : (
+            <ViewTransition name={`empty-ice-${laneIdx}`}>
+              <div><EmptyPlayerCard type="active" /></div>
+            </ViewTransition>
+          )}
         </div>
+
         <ChevronRight className="w-3 h-3 text-slate-800 shrink-0" />
-        <div className="w-28 shrink-0" onClick={() => actions.switchLane(laneIdx)}>
-          {onDeck ? <PlayerCard player={{...onDeck, is_on_ice: false}} /> : <div className="w-28 h-11 bg-slate-950/50 rounded border border-slate-900 border-dashed" />}
+
+        <div className="w-28 shrink-0">
+          {onDeck ? (
+            <InactivePlayerCard key={onDeck.id} player={onDeck} />
+          ) : (
+            <ViewTransition name={`empty-deck-${laneIdx}`}>
+              <div><EmptyPlayerCard /></div>
+            </ViewTransition>
+          )}
         </div>
+
         <div className="w-px h-8 bg-slate-900 shrink-0 mx-1"></div>
+
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1">
           {tail.map(p => (
             <div key={p.id} className="shrink-0 grayscale opacity-40">
-              <PlayerCard player={{...p, is_on_ice: false}} />
+              <InactivePlayerCard player={p} />
             </div>
           ))}
           {tail.length === 0 && <div className="text-[8px] font-bold text-slate-800 uppercase italic self-center">Queue Empty</div>}
@@ -130,7 +147,7 @@ const Bench: React.FC = () => {
                 if (lane !== null) actions.moveLane(p.id, parseInt(lane));
               }}
             >
-              <PlayerCard player={p} />
+              <InactivePlayerCard player={p} />
             </div>
           ))}
           {benchPlayers.length === 0 && <span className="text-[10px] text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
