@@ -31,7 +31,10 @@ export class GameRepository {
     if (keys.length === 0) return;
 
     const setClause = keys.map(k => `${k} = ?`).join(', ');
-    const values = keys.map(k => (updates as any)[k]);
+    const values = keys.map(k => {
+      const val = (updates as any)[k];
+      return val === undefined ? null : val;
+    });
 
     await this.db.prepare(
       `UPDATE players SET ${setClause} WHERE id = ?`
@@ -41,7 +44,10 @@ export class GameRepository {
   async updateGameState(updates: Partial<GameState>, now: number) {
     const keys = Object.keys(updates);
     const setClause = keys.map(k => `${k} = ?`).join(', ');
-    const values = keys.map(k => (updates as any)[k]);
+    const values = keys.map(k => {
+      const val = (updates as any)[k];
+      return val === undefined ? null : val;
+    });
 
     // Always update updated_at
     await this.db.prepare(
@@ -85,10 +91,8 @@ export class GameRepository {
       await this.updatePlayer(currentOnIce.id, {
         queue_order: players.length - 1,
         total_time: newTotalTime,
-        last_shift_started: undefined // Explicitly null in DB logic usually, but type allows undefined
+        last_shift_started: undefined // Will be converted to null
       });
-      // We need to use NULL for SQL
-      await this.db.prepare("UPDATE players SET last_shift_started = NULL WHERE id = ?").bind(currentOnIce.id).run();
     }
 
     // 2. Shift everyone else up
