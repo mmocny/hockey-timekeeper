@@ -7,10 +7,8 @@ CREATE TABLE players (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   number TEXT NOT NULL,
-  position TEXT NOT NULL, -- Keep for metadata
   lane INTEGER DEFAULT 5, -- 0: C, 1: LW, 2: RW, 3: LD, 4: RD, 5: Bench
-  queue_order INTEGER DEFAULT 0,
-  is_on_ice BOOLEAN DEFAULT 0,
+  queue_order INTEGER DEFAULT 0, -- 0 is always "On Ice" for lanes 0-4
   total_time INTEGER DEFAULT 0,
   last_shift_started INTEGER
 );
@@ -22,22 +20,23 @@ CREATE TABLE game_state (
   updated_at INTEGER
 );
 
--- Initial Roster with Lane Assignments and Starting Lineup
-INSERT INTO players (id, name, number, position, lane, queue_order, is_on_ice) VALUES 
-('1', 'Kitt', '2', 'F', 0, 0, 1),
-('2', 'Brodie', '4', 'F', 0, 1, 0),
-('3', 'Demarco', '5', 'G', 5, 0, 0),
-('4', 'Dawson', '6', 'F', 1, 0, 1),
-('5', 'Able', '7', 'F', 1, 1, 0),
-('6', 'Leighton', '8', 'F', 2, 0, 1),
-('7', 'Zev', '10', 'F', 2, 1, 0),
-('8', 'Wiktor', '12', 'F', 3, 0, 1),
-('9', 'John', '13', 'F', 3, 1, 0),
-('10', 'Logan', '14', 'F', 4, 0, 1),
-('11', 'Cross', '15', 'F', 4, 1, 0),
-('12', 'Grayson Adams', '16', 'F', 5, 1, 0),
-('13', 'Naawakmig', '17', 'F', 5, 2, 0),
-('14', 'Maajiikwis', '18', 'F', 5, 3, 0);
+-- Initial Roster
+-- queue_order 0 means they start ON ICE
+INSERT INTO players (id, name, number, lane, queue_order, last_shift_started) VALUES 
+('1', 'Kitt', '2', 0, 0, NULL),
+('2', 'Brodie', '4', 0, 1, NULL),
+('3', 'Demarco', '5', 5, 0, NULL),
+('4', 'Dawson', '6', 1, 0, NULL),
+('5', 'Able', '7', 1, 1, NULL),
+('6', 'Leighton', '8', 2, 0, NULL),
+('7', 'Zev', '10', 2, 1, NULL),
+('8', 'Wiktor', '12', 3, 0, NULL),
+('9', 'John', '13', 3, 1, NULL),
+('10', 'Logan', '14', 4, 0, NULL),
+('11', 'Cross', '15', 4, 1, NULL),
+('12', 'Grayson Adams', '16', 5, 1, NULL),
+('13', 'Naawakmig', '17', 5, 2, NULL),
+('14', 'Maajiikwis', '18', 5, 3, NULL);
 
 INSERT INTO game_state (id, is_paused, game_time, updated_at) VALUES 
 ('active_game', 1, 0, strftime('%s', 'now'));

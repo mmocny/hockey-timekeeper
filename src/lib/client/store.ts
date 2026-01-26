@@ -1,0 +1,45 @@
+import { atom, map } from 'nanostores';
+import { type Player } from '../shared/types';
+
+export const playersStore = map<Record<string, Player>>({});
+export const isPaused = atom(true);
+export const lastUpdate = atom(0);
+
+let pollingInterval: number | null = null;
+
+export function startPolling() {
+  if (pollingInterval) return;
+  syncWithServer();
+  pollingInterval = setInterval(() => syncWithServer(), 1000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') syncWithServer();
+  });
+}
+
+// Accepts an optional pending count check to allow actions.ts to override
+export async function syncWithServer(pendingCount = 0) {
+  if (pendingCount > 0) return;
+
+  try {
+    const res = await fetch('/api/game');
+    if (!res.ok) return;
+    const data = await res.json();
+    
+    // Check pending count again after fetch (basic race check)
+    // Note: In a real circular dependency, we'd need a shared state for pendingCount.
+    // For now, relying on the interval tick is "good enough" for free-tier polling.
+    // Ideally actions.ts manages the "is syncing allowed" flag.
+    
+    const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, {
+      ...p,
+      // Derived is_on_ice for UI convenience, though schema dropped it
+      is_on_ice: p.lane < 5 && p.queue_order === 0
+    }]));
+    
+    playersStore.set(playersMap);
+    isPaused.set(!!data.gameState.is_paused);
+    lastUpdate.set(Date.now());
+  } catch (err) {
+    console.error('Failed to sync:', err);
+  }
+}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
-import { isPaused, type Player } from '../lib/store';
+import { isPaused, type Player } from '../lib/client/store';
 
 interface Props {
   player: Player;

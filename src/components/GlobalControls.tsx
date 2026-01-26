@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '@nanostores/react';
-import { isPaused, toggleGlobalPause, switchAll } from '../lib/store';
+import { isPaused } from '../lib/client/store';
+import { toggleGlobalPause, switchAll } from '../lib/client/actions';
 import { Play, Pause, RefreshCcw } from 'lucide-react';
 
 export const GlobalControls: React.FC = () => {
