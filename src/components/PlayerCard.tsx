@@ -1,4 +1,4 @@
-import React, { useState, useEffect, use, ViewTransition } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { GameContext } from '../lib/client/context';
 import type { Player } from '../lib/shared/types';
 
@@ -30,9 +30,8 @@ export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
   const totalDisplay = formatTime(player.total_time + elapsed);
 
   return (
-    <ViewTransition name={`player-${player.id}`}>
-      <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-blue-600 border-blue-400 text-white shadow-md">
-        <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
+    <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-blue-600 border-blue-400 text-white shadow-md">
+      <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
           <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
           <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
         </div>
@@ -48,28 +47,25 @@ export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
           </div>
         </div>
       </div>
-    </ViewTransition>
   );
 };
 
 export const InactivePlayerCard: React.FC<Props> = ({ player }) => (
-  <ViewTransition name={`player-${player.id}`}>
-    <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-slate-900 border-slate-800 text-slate-300">
-      <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
-        <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
-        <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
-      </div>
-      
-      <div className="flex flex-col items-end shrink-0 ml-1 pointer-events-none border-l border-white/10 pl-2">
-        <div className="h-3 mb-1" />
-        <div className="flex items-center gap-0.5">
-          <span className="text-[8px] font-mono leading-none text-slate-500">
-            Σ {formatTime(player.total_time)}
-          </span>
-        </div>
+  <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-slate-900 border-slate-800 text-slate-300">
+    <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
+      <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
+      <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
+    </div>
+    
+    <div className="flex flex-col items-end shrink-0 ml-1 pointer-events-none border-l border-white/10 pl-2">
+      <div className="h-3 mb-1" />
+      <div className="flex items-center gap-0.5">
+        <span className="text-[8px] font-mono leading-none text-slate-500">
+          Σ {formatTime(player.total_time)}
+        </span>
       </div>
     </div>
-  </ViewTransition>
+  </div>
 );
 
 export const EmptyPlayerCard: React.FC<{ type?: 'active' | 'inactive' }> = ({ type = 'inactive' }) => (

@@ -1,25 +1,3 @@
 @import "tailwindcss";
 
-/* 
-  Customize View Transitions for a "Conveyor Belt" feel 
-  This overrides the default cross-fade for elements moving position.
-*/
 
-::view-transition-group(root) {
-  animation-duration: 0.4s;
-}
-
-/* Make moving elements slide smoothly */
-::view-transition-group(*) {
-  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Optional: Define specific slide animations if needed, 
-   but usually the browser's transform interpolation is what we want 
-   without the cross-fade opacity. */
-::view-transition-old(*),
-::view-transition-new(*) {
-  /* Prevent opacity fading to keep the card solid during the move */
-  animation: none;
-  mix-blend-mode: normal;
-}

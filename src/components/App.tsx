@@ -1,9 +1,10 @@
-import React, { useEffect, useOptimistic, useTransition, use, ViewTransition } from 'react';
+import React, { useEffect, useOptimistic, useTransition, use } from 'react';
 import { useStore } from '@nanostores/react';
 import { playersStore, isPaused as isPausedStore, startPolling } from '../lib/client/store';
 import * as serverActions from '../lib/client/actions';
 import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { GlobalControls } from './GlobalControls';
+import { Stats } from './Stats';
 import { GameContext } from '../lib/client/context';
 import { LANE_NAMES, type Player } from '../lib/shared/types';
 import { RotateCcw, ChevronRight } from 'lucide-react';
@@ -11,56 +12,33 @@ import { RotateCcw, ChevronRight } from 'lucide-react';
 // --- Reducers for Optimistic State ---
 
 type PlayerAction = 
-  | { type: 'switch_lane'; lane: number }
-  | { type: 'switch_all' }
-  | { type: 'move_lane'; id: string; lane: number }
+  | { type: 'update_players'; updates: Record<string, Partial<Player>> }
+  | { type: 'set_pause'; isPaused: boolean }
   | { type: 'reset_game' };
 
 function playerReducer(state: Player[], action: PlayerAction): Player[] {
-  const now = Math.floor(Date.now() / 1000);
-  const nextState = [...state];
-
   switch (action.type) {
-    case 'switch_lane': {
-      const lanePlayers = nextState.filter(p => p.lane === action.lane).sort((a, b) => a.queue_order - b.queue_order);
-      if (lanePlayers.length === 0) return state;
-      
-      // Move 0 to end
-      const current = lanePlayers[0];
-      const maxOrder = Math.max(...lanePlayers.map(p => p.queue_order));
-      
-      const updatedPlayers = lanePlayers.map((p, idx) => {
-        if (p.id === current.id) {
-          return { ...p, queue_order: maxOrder + 1, last_shift_started: undefined };
-        }
-        // Shift up
-        const newOrder = p.queue_order - 1;
-        const isNowActive = newOrder === 0;
-        return { 
-          ...p, 
-          queue_order: newOrder, 
-          last_shift_started: isNowActive ? now : undefined 
-        };
+    case 'update_players': {
+      return state.map(p => {
+        const update = action.updates[p.id];
+        return update ? { ...p, ...update } : p;
       });
-
-      return nextState.map(p => updatedPlayers.find(up => up.id === p.id) || p);
     }
-    case 'switch_all': {
-      // Simplistic approach: Apply switch_lane logic to all lanes 0-4
-      let tempState = nextState;
-      for (let i = 0; i < 5; i++) {
-        tempState = playerReducer(tempState, { type: 'switch_lane', lane: i });
-      }
-      return tempState;
-    }
-    case 'move_lane': {
-      const { id, lane } = action;
-      const targetLanePlayers = nextState.filter(p => p.lane === lane);
-      const nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
-      return nextState.map(p => p.id === id ? { ...p, lane, queue_order: nextOrder, last_shift_started: undefined } : p);
+    case 'set_pause': {
+      // Logic for pausing is handled by gameActions calculating the new state or just the flag
+      // But we need to update last_shift_started if pausing/resuming?
+      // Actually, if we use explicit 'update_players' for everything, we might not need this?
+      // But toggle_pause affects ALL active players.
+      // Let's keep it simple: toggle_pause logic can also be pre-calculated!
+      // But wait, the hook 'optimisticPaused' is separate.
+      // So this reducer is ONLY for players.
+      // The pause state is handled by the other useOptimistic.
+      // However, we DO need to update 'last_shift_started' on players when pausing.
+      // So 'update_players' is sufficient!
+      return state;
     }
     case 'reset_game': {
-      return nextState.map(p => ({ ...p, total_time: 0, last_shift_started: undefined }));
+      return state.map(p => ({ ...p, total_time: 0, last_shift_started: undefined }));
     }
     default:
       return state;
@@ -95,9 +73,7 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
           {onIce ? (
             <ActivePlayerCard key={onIce.id} player={onIce} />
           ) : (
-            <ViewTransition name={`empty-ice-${laneIdx}`}>
-              <div><EmptyPlayerCard type="active" /></div>
-            </ViewTransition>
+            <div><EmptyPlayerCard type="active" /></div>
           )}
         </div>
 
@@ -107,9 +83,7 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
           {onDeck ? (
             <InactivePlayerCard key={onDeck.id} player={onDeck} />
           ) : (
-            <ViewTransition name={`empty-deck-${laneIdx}`}>
-              <div><EmptyPlayerCard /></div>
-            </ViewTransition>
+            <div><EmptyPlayerCard /></div>
           )}
         </div>
 
@@ -184,31 +158,112 @@ export const App: React.FC = () => {
   // 4. Define Actions
   const gameActions = {
     switchLane: (lane: number) => {
+      const now = Math.floor(Date.now() / 1000);
+      const lanePlayers = optimisticPlayers.filter(p => p.lane === lane).sort((a, b) => a.queue_order - b.queue_order);
+      if (lanePlayers.length === 0) return;
+
+      const current = lanePlayers[0];
+      const maxOrder = Math.max(...lanePlayers.map(p => p.queue_order));
+      const updates: Record<string, Partial<Player>> = {};
+
+      lanePlayers.forEach(p => {
+        if (p.id === current.id) {
+          let newTotal = p.total_time;
+          if (p.last_shift_started && !optimisticPaused) {
+            newTotal += (now - p.last_shift_started);
+          }
+          updates[p.id] = { queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
+        } else {
+          const newOrder = p.queue_order - 1;
+          const isNowActive = newOrder === 0 && !optimisticPaused;
+          updates[p.id] = { 
+            queue_order: newOrder, 
+            last_shift_started: isNowActive ? now : undefined 
+          };
+        }
+      });
+
       startTransition(async () => {
-        setOptimisticPlayers({ type: 'switch_lane', lane });
+        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.switchLane(lane);
       });
     },
     switchAll: () => {
+      const now = Math.floor(Date.now() / 1000);
+      const updates: Record<string, Partial<Player>> = {};
+
+      for (let lane = 0; lane < 5; lane++) {
+        const lanePlayers = optimisticPlayers.filter(p => p.lane === lane).sort((a, b) => a.queue_order - b.queue_order);
+        if (lanePlayers.length === 0) continue;
+
+        const current = lanePlayers[0];
+        const maxOrder = Math.max(...lanePlayers.map(p => p.queue_order));
+
+        lanePlayers.forEach(p => {
+          if (p.id === current.id) {
+            let newTotal = p.total_time;
+            if (p.last_shift_started && !optimisticPaused) {
+              newTotal += (now - p.last_shift_started);
+            }
+            updates[p.id] = { ...updates[p.id], queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
+          } else {
+            const newOrder = p.queue_order - 1;
+            const isNowActive = newOrder === 0 && !optimisticPaused;
+            updates[p.id] = { 
+              ...updates[p.id],
+              queue_order: newOrder, 
+              last_shift_started: isNowActive ? now : undefined 
+            };
+          }
+        });
+      }
+
       startTransition(async () => {
-        setOptimisticPlayers({ type: 'switch_all' });
+        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.switchAll();
       });
     },
     moveLane: (id: string, lane: number) => {
+      const targetLanePlayers = optimisticPlayers.filter(p => p.lane === lane);
+      const nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
+      
+      const updates: Record<string, Partial<Player>> = {
+        [id]: { lane, queue_order: nextOrder, last_shift_started: undefined }
+      };
+
       startTransition(async () => {
-        setOptimisticPlayers({ type: 'move_lane', id, lane });
+        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.moveLane(id, lane);
       });
     },
     toggleGlobalPause: () => {
+      const next = !optimisticPaused;
+      const now = Math.floor(Date.now() / 1000);
+      const updates: Record<string, Partial<Player>> = {};
+
+      optimisticPlayers.forEach(p => {
+        const isOnIce = p.lane !== null && p.lane < 5 && p.queue_order === 0;
+        if (!isOnIce) return;
+
+        if (next) { // Pausing
+          let newTotal = p.total_time;
+          if (p.last_shift_started) {
+            newTotal += (now - p.last_shift_started);
+          }
+          updates[p.id] = { total_time: newTotal, last_shift_started: undefined };
+        } else { // Resuming
+          updates[p.id] = { last_shift_started: now };
+        }
+      });
+
       startTransition(async () => {
-        const next = !optimisticPaused;
         setOptimisticPaused(next);
+        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.toggleGlobalPause(next);
       });
     },
-    resetGame: () => {
+    resetGame: async () => {
+      if (!confirm('Are you sure you want to reset all game time?')) return;
       startTransition(async () => {
         setOptimisticPlayers({ type: 'reset_game' });
         setOptimisticPaused(true);
@@ -244,6 +299,8 @@ export const App: React.FC = () => {
         </div>
 
         <Bench />
+
+        <Stats players={optimisticPlayers} isPaused={optimisticPaused} />
 
         <div className="mt-12 mb-8 flex justify-center">
           <button 

@@ -18,13 +18,13 @@ export const GlobalControls: React.FC = () => {
       >
         {!isPaused ? (
           <>
-            <Play className="w-8 h-8 fill-current" />
-            <span className="text-xl font-black uppercase tracking-widest leading-none">Resume</span>
+            <Pause className="w-8 h-8 fill-current" />
+            <span className="text-xl font-black uppercase tracking-widest leading-none">Pause</span>
           </>
         ) : (
           <>
-            <Pause className="w-8 h-8 fill-current" />
-            <span className="text-xl font-black uppercase tracking-widest leading-none">Pause</span>
+            <Play className="w-8 h-8 fill-current" />
+            <span className="text-xl font-black uppercase tracking-widest leading-none">Resume</span>
           </>
         )}
       </button>
