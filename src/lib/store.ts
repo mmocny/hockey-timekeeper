@@ -20,6 +20,25 @@ export const lastUpdate = atom(0); // For identifying remote vs local updates
 
 // Track in-flight optimistic updates to avoid polling flicker
 let pendingUpdates = 0;
+let pollingInterval: NodeJS.Timeout | null = null;
+
+export function startPolling() {
+  if (pollingInterval) return;
+
+  // Initial sync
+  syncWithServer();
+
+  // Poll every 1s
+  pollingInterval = setInterval(syncWithServer, 1000);
+
+  // Sync on visibility change
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      syncWithServer();
+    }
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+}
 
 export async function syncWithServer() {
   // If we have pending local actions, skip polling to prevent UI flicker

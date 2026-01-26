@@ -1,14 +1,8 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { GlobalControls } from "../components/GlobalControls";
-import { SyncManager } from "../components/SyncManager";
-import { Dashboard } from "../components/Dashboard";
+import Layout from '../layouts/Layout.astro';
+import { App } from '../components/App';
 ---
 
 <Layout title="Dashboard">
-  <SyncManager client:load />
-  <div class="max-w-2xl mx-auto">
-    <GlobalControls client:load />
-    <Dashboard client:load />
-  </div>
+  <App client:only="react" />
 </Layout>
