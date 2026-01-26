@@ -16,23 +16,15 @@ export function startPolling() {
   });
 }
 
-// Accepts an optional pending count check to allow actions.ts to override
-export async function syncWithServer(pendingCount = 0) {
-  if (pendingCount > 0) return;
-
+export async function syncWithServer() {
   try {
     const res = await fetch('/api/game');
     if (!res.ok) return;
     const data = await res.json();
     
-    // Check pending count again after fetch (basic race check)
-    // Note: In a real circular dependency, we'd need a shared state for pendingCount.
-    // For now, relying on the interval tick is "good enough" for free-tier polling.
-    // Ideally actions.ts manages the "is syncing allowed" flag.
-    
     const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, {
       ...p,
-      // Derived is_on_ice for UI convenience, though schema dropped it
+      // Derived is_on_ice for UI convenience
       is_on_ice: p.lane < 5 && p.queue_order === 0
     }]));
     
