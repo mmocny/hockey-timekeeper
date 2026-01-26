@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useStore } from '@nanostores/react';
 import { playersStore, startPolling } from '../lib/client/store';
 import { switchLane, moveLane, resetGame } from '../lib/client/actions';
-import { CompactPlayer } from './CompactPlayer';
+import { PlayerCard } from './PlayerCard';
 import { GlobalControls } from './GlobalControls';
 import { RotateCcw, ChevronRight } from 'lucide-react';
 import { LANE_NAMES } from '../lib/shared/types';
@@ -26,15 +26,14 @@ const LaneRow: React.FC<{ laneIdx: number; playerList: any[]; onNextShift: (idx:
       <div className="flex items-center gap-2 min-h-[44px] px-1">
         {/* On Ice Slot */}
         <div className="w-28 shrink-0" onClick={() => onNextShift(laneIdx)}>
-          {onIce ? <CompactPlayer player={{...onIce, is_on_ice: true}} /> : <div className="w-28 h-11 rounded border border-dashed border-slate-800 flex items-center justify-center text-[9px] text-slate-700 font-bold uppercase">Empty</div>}
+          {onIce ? <PlayerCard player={{...onIce, is_on_ice: true}} /> : <div className="w-28 h-11 rounded border border-dashed border-slate-800 flex items-center justify-center text-[9px] text-slate-700 font-bold uppercase">Empty</div>}
         </div>
 
         <ChevronRight className="w-3 h-3 text-slate-800 shrink-0" />
 
         {/* On Deck Slot */}
         <div className="w-28 shrink-0" onClick={() => onNextShift(laneIdx)}>
-          {onDeck ? <CompactPlayer player={{...onDeck, is_on_ice: false}} /> : <div className="w-28 h-11 bg-slate-950/50 rounded border border-slate-900 border-dashed" />}
-        </div>
+          {onDeck ? <PlayerCard player={{...onDeck, is_on_ice: false}} /> : <div className="w-28 h-11 bg-slate-950/50 rounded border border-slate-900 border-dashed" />}</div>
 
         <div className="w-px h-8 bg-slate-900 shrink-0 mx-1"></div>
 
@@ -42,7 +41,7 @@ const LaneRow: React.FC<{ laneIdx: number; playerList: any[]; onNextShift: (idx:
         <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1">
           {tail.map(p => (
             <div key={p.id} className="shrink-0 grayscale opacity-40">
-              <CompactPlayer player={{...p, is_on_ice: false}} />
+              <PlayerCard player={{...p, is_on_ice: false}} />
             </div>
           ))}
           {tail.length === 0 && <div className="text-[8px] font-bold text-slate-800 uppercase italic self-center">Queue Empty</div>}
@@ -79,7 +78,7 @@ export const App: React.FC = () => {
       
       <div className="flex text-[9px] font-black uppercase text-slate-700 tracking-[0.2em] mb-3 px-3">
         <div className="w-28 mr-5">ON ICE</div>
-        <div className="w-28 mr-4">NEXT</div>
+        <div className="w-28 mr-4">ON DECK</div>
         <div>QUEUE</div>
       </div>
 
@@ -102,7 +101,7 @@ export const App: React.FC = () => {
                   if (lane !== null) moveLane(p.id, parseInt(lane));
                 }}
               >
-                <CompactPlayer player={p} />
+                <PlayerCard player={p} />
               </div>
             ))}
             {benchPlayers.length === 0 && <span className="text-[10px] text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
