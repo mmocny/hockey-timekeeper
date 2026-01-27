@@ -18,6 +18,13 @@ export class GameRepository {
     return result || { is_paused: true, game_time: 0, updated_at: 0 };
   }
 
+  async getGameTimestamp(): Promise<number> {
+    const result = await this.db.prepare(
+      "SELECT updated_at FROM game_state WHERE id = 'active_game'"
+    ).first<{ updated_at: number }>();
+    return result?.updated_at || 0;
+  }
+
   async getLanePlayers(lane: number): Promise<Player[]> {
     const result = await this.db.prepare(
       "SELECT * FROM players WHERE lane = ? ORDER BY queue_order ASC"
@@ -50,9 +57,11 @@ export class GameRepository {
     });
 
     // Always update updated_at
-    await this.db.prepare(
-      `UPDATE game_state SET ${setClause}, updated_at = ? WHERE id = 'active_game'`
-    ).bind(...values, now).run();
+    const query = keys.length > 0 
+      ? `UPDATE game_state SET ${setClause}, updated_at = ? WHERE id = 'active_game'`
+      : `UPDATE game_state SET updated_at = ? WHERE id = 'active_game'`;
+
+    await this.db.prepare(query).bind(...values, now).run();
   }
 
   async resetGame(now: number) {
@@ -72,6 +81,9 @@ export class GameRepository {
     await this.db.prepare(
       "UPDATE players SET lane = ?, queue_order = ?, last_shift_started = NULL WHERE id = ?"
     ).bind(lane, nextOrder, id).run();
+
+    // Signal update
+    await this.updateGameState({}, Math.floor(Date.now() / 1000));
   }
 
   async switchLane(lane: number, now: number) {
@@ -107,6 +119,8 @@ export class GameRepository {
         "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
       ).bind(newOrder, lastShiftStarted, p.id).run();
     }
+    
+    await this.updateGameState({}, now);
   }
 
   async togglePause(isPaused: boolean, now: number) {

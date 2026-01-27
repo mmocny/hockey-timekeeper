@@ -1,4 +1,4 @@
-import { syncWithServer } from './store';
+import { syncWithServer, updateGameStore } from './store';
 import { API_ACTIONS } from '../shared/types';
 
 // Pure Async Actions (Server Actions style)
@@ -10,12 +10,9 @@ async function performServerAction(apiAction: string, payload: any = {}) {
       method: 'POST',
       body: JSON.stringify({ 
         action: apiAction, 
-        payload, 
-        timestamp: Date.now() 
+        payload
       })
     });
-    // Immediately sync to update "Server State" (the Nano Store)
-    await syncWithServer();
   } catch (err) {
     console.error(`Action ${apiAction} failed:`, err);
     throw err;
