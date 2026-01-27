@@ -10,6 +10,18 @@ export const lastUpdate = atom(0); // Server-side updated_at timestamp
 let isPolling = false;
 let currentTs = 0;
 let currentController: AbortController | null = null;
+let pendingActions = 0;
+
+export function incrementPending() {
+  pendingActions++;
+  if (currentController) currentController.abort(); // Cancel any background poll to prioritize action
+}
+
+export function decrementPending() {
+  pendingActions = Math.max(0, pendingActions - 1);
+  // If we hit 0, the poll loop (which is sleeping) will wake up naturally or we can nudge it?
+  // The loop is just retrying or sleeping.
+}
 
 export function startPolling() {
   if (isPolling) return;
@@ -18,22 +30,31 @@ export function startPolling() {
   
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      // Force immediate refresh by aborting the pending long-poll
-      if (currentController) {
-        currentController.abort();
-      }
+      abortPolling();
     }
   });
 }
 
+export function abortPolling() {
+  if (currentController) {
+    currentController.abort();
+  }
+}
+
 async function pollLoop() {
   while (isPolling) {
+    if (pendingActions > 0) {
+      // Don't poll while we have local actions in flight to prevent overwriting local optimistic state
+      await new Promise(r => setTimeout(r, 100)); 
+      continue;
+    }
+
     try {
       currentController = new AbortController();
       await syncWithServer(currentController.signal);
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        // Aborted to force refresh, retry immediately
+        // Aborted to force refresh or due to user action, retry immediately
         continue;
       }
       console.error('Poll failed, retrying in 2s:', err);
@@ -42,6 +63,26 @@ async function pollLoop() {
       currentController = null;
     }
   }
+}
+
+export function commitLocalUpdate(playerUpdates: Record<string, Partial<Player>> = {}, gameStateUpdates: Partial<{ is_paused: boolean; game_time: number; updated_at: number }> = {}) {
+  // 1. Update Players
+  if (Object.keys(playerUpdates).length > 0) {
+    const currentPlayers = playersStore.get();
+    const newPlayers = { ...currentPlayers };
+    
+    Object.entries(playerUpdates).forEach(([id, updates]) => {
+      if (newPlayers[id]) {
+        newPlayers[id] = { ...newPlayers[id], ...updates };
+      }
+    });
+    playersStore.set(newPlayers);
+  }
+
+  // 2. Update Game State
+  if (gameStateUpdates.is_paused !== undefined) isPaused.set(gameStateUpdates.is_paused);
+  if (gameStateUpdates.game_time !== undefined) gameTime.set(gameStateUpdates.game_time);
+  if (gameStateUpdates.updated_at !== undefined) updatedAt.set(gameStateUpdates.updated_at);
 }
 
 export function updateGameStore(data: any) {

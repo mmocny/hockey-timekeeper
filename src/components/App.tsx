@@ -1,7 +1,7 @@
 import React, { useEffect, useOptimistic, useTransition, use, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor } from '@dnd-kit/core';
-import { playersStore, isPaused as isPausedStore, gameTime as gameTimeStore, updatedAt as updatedAtStore, startPolling } from '../lib/client/store';
+import { playersStore, isPaused as isPausedStore, gameTime as gameTimeStore, updatedAt as updatedAtStore, startPolling, abortPolling, commitLocalUpdate } from '../lib/client/store';
 import * as serverActions from '../lib/client/actions';
 import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { DraggablePlayer } from './DraggablePlayer';
@@ -248,7 +248,6 @@ export const App: React.FC = () => {
   // 4. Define Actions
   const gameActions = {
     syncClock: (direction: 'up' | 'down') => {
-      // Calculate delta locally for optimistic update
       const now = Math.floor(Date.now() / 1000);
       const currentTotal = optimisticGameTime + (optimisticPaused ? 0 : now - serverUpdatedAt);
       const seconds = currentTotal % 60;
@@ -258,8 +257,16 @@ export const App: React.FC = () => {
       else delta = seconds === 0 ? 60 : (60 - seconds);
 
       if (currentTotal + delta < 0) delta = -currentTotal;
+      
+      const newGameTime = optimisticGameTime + delta;
+
+      // 1. Kill stale poll
+      abortPolling();
+      // 2. Commit to local store (base state)
+      commitLocalUpdate({}, { game_time: newGameTime });
 
       startTransition(async () => {
+        // 3. Optimistic update (redundant but keeps UI consistent during transition)
         setOptimisticGameTime(delta);
         await serverActions.syncClock(direction);
       });
@@ -289,6 +296,9 @@ export const App: React.FC = () => {
           };
         }
       });
+
+      abortPolling();
+      commitLocalUpdate(updates);
 
       startTransition(async () => {
         setOptimisticPlayers({ type: 'update_players', updates });
@@ -325,6 +335,9 @@ export const App: React.FC = () => {
         });
       }
 
+      abortPolling();
+      commitLocalUpdate(updates);
+
       startTransition(async () => {
         setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.switchAll();
@@ -338,6 +351,9 @@ export const App: React.FC = () => {
         [id]: { lane, queue_order: nextOrder, last_shift_started: undefined }
       };
 
+      abortPolling();
+      commitLocalUpdate(updates);
+
       startTransition(async () => {
         setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.moveLane(id, lane);
@@ -347,6 +363,12 @@ export const App: React.FC = () => {
       const next = !optimisticPaused;
       const now = Math.floor(Date.now() / 1000);
       const updates: Record<string, Partial<Player>> = {};
+      let gameTimeUpdate = optimisticGameTime;
+
+      if (next) { // Pausing
+        // Update Game Time
+        gameTimeUpdate += (now - serverUpdatedAt);
+      }
 
       optimisticPlayers.forEach(p => {
         const isOnIce = p.lane !== null && p.lane < 6 && p.queue_order === 0;
@@ -363,17 +385,41 @@ export const App: React.FC = () => {
         }
       });
 
+      abortPolling();
+      commitLocalUpdate(updates, { is_paused: next, game_time: gameTimeUpdate, updated_at: now });
+
       startTransition(async () => {
         setOptimisticPaused(next);
+        // Note: We don't have an optimisticGameTime setter for absolute value here easily?
+        // Actually, we do: setOptimisticGameTime(delta).
+        // Since we updated the base store, we don't strictly need to update optimisticGameTime if we pass 0?
+        // Or better, we can update it.
+        // But our reducer is `state + delta`.
+        // If we update base, base changes.
+        // `useOptimistic` resets.
+        // So we don't need to do anything for gameTime in startTransition if we committed to store!
         setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.toggleGlobalPause(next);
       });
     },
     resetGame: async () => {
       if (!confirm('Are you sure you want to reset all game time?')) return;
+      
+      abortPolling();
+      // Reset local store
+      commitLocalUpdate({}, { is_paused: true, game_time: 0, updated_at: 0 });
+      // Reset players (tricky to do partial update for all, better to let server refresh or loop all)
+      // We can loop all optimisticPlayers
+      const updates: Record<string, Partial<Player>> = {};
+      optimisticPlayers.forEach(p => {
+        updates[p.id] = { total_time: 0, last_shift_started: undefined };
+      });
+      commitLocalUpdate(updates);
+
       startTransition(async () => {
         setOptimisticPlayers({ type: 'reset_game' });
         setOptimisticPaused(true);
+        setOptimisticGameTime(-optimisticGameTime); // Reset to 0
         await serverActions.resetGame();
       });
     }

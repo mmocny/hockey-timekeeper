@@ -1,4 +1,4 @@
-import { syncWithServer, updateGameStore } from './store';
+import { syncWithServer, updateGameStore, incrementPending, decrementPending } from './store';
 import { API_ACTIONS } from '../shared/types';
 
 // Pure Async Actions (Server Actions style)
@@ -6,6 +6,7 @@ import { API_ACTIONS } from '../shared/types';
 
 async function performServerAction(apiAction: string, payload: any = {}) {
   try {
+    incrementPending();
     await fetch('/api/game', {
       method: 'POST',
       body: JSON.stringify({ 
@@ -16,6 +17,8 @@ async function performServerAction(apiAction: string, payload: any = {}) {
   } catch (err) {
     console.error(`Action ${apiAction} failed:`, err);
     throw err;
+  } finally {
+    decrementPending();
   }
 }
 
