@@ -7,6 +7,7 @@ export const lastUpdate = atom(0); // Server-side updated_at timestamp
 
 let isPolling = false;
 let currentTs = 0;
+let currentController: AbortController | null = null;
 
 export function startPolling() {
   if (isPolling) return;
@@ -15,10 +16,10 @@ export function startPolling() {
   
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      // Force an immediate check if we were sleeping or errored
-      // But usually the long-poll is hanging. 
-      // We can't easily cancel the existing fetch without AbortController,
-      // but simpler to just let it ride.
+      // Force immediate refresh by aborting the pending long-poll
+      if (currentController) {
+        currentController.abort();
+      }
     }
   });
 }
@@ -26,10 +27,17 @@ export function startPolling() {
 async function pollLoop() {
   while (isPolling) {
     try {
-      await syncWithServer();
-    } catch (err) {
+      currentController = new AbortController();
+      await syncWithServer(currentController.signal);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        // Aborted to force refresh, retry immediately
+        continue;
+      }
       console.error('Poll failed, retrying in 2s:', err);
       await new Promise(r => setTimeout(r, 2000));
+    } finally {
+      currentController = null;
     }
   }
 }
@@ -48,10 +56,10 @@ export function updateGameStore(data: any) {
   }
 }
 
-export async function syncWithServer() {
+export async function syncWithServer(signal?: AbortSignal) {
   try {
     const url = `/api/game?since=${currentTs}`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
