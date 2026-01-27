@@ -6,6 +6,7 @@ import * as serverActions from '../lib/client/actions';
 import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { DraggablePlayer } from './DraggablePlayer';
 import { DroppableLane } from './DroppableLane';
+import { DropPlaceholder } from './DropPlaceholder';
 import { GlobalControls } from './GlobalControls';
 import { Stats } from './Stats';
 import { GameContext } from '../lib/client/context';
@@ -63,58 +64,64 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
 
   return (
     <DroppableLane laneId={laneIdx} className="py-2 border-b border-slate-900 last:border-0 cursor-pointer">
-      {({ isOver }) => (
-        <div 
-          onClick={() => actions.switchLane(laneIdx)}
-        >
-          <div className="flex items-center gap-2 mb-1.5 px-1">
-            <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{LANE_NAMES[laneIdx]}</span>
-            <div className="h-px bg-slate-900 flex-1"></div>
+      {({ isOver }) => {
+        const showOnIcePlaceholder = isOver && lanePlayers.length === 0;
+        const showOnDeckPlaceholder = isOver && lanePlayers.length === 1;
+        const showQueuePlaceholder = isOver && lanePlayers.length >= 2;
+
+        return (
+          <div 
+            onClick={() => actions.switchLane(laneIdx)}
+          >
+            <div className="flex items-center gap-2 mb-1.5 px-1">
+              <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{LANE_NAMES[laneIdx]}</span>
+              <div className="h-px bg-slate-900 flex-1"></div>
+            </div>
+
+            <div className="flex items-center gap-2 min-h-[44px] px-1">
+              <div className="w-28 shrink-0">
+                {onIce ? (
+                  <DraggablePlayer id={onIce.id}>
+                    <ActivePlayerCard key={onIce.id} player={onIce} />
+                  </DraggablePlayer>
+                ) : showOnIcePlaceholder ? (
+                  <DropPlaceholder />
+                ) : (
+                  <div><EmptyPlayerCard type="active" /></div>
+                )}
+              </div>
+
+              <ChevronRight className="w-3 h-3 text-slate-800 shrink-0" />
+
+              <div className="w-28 shrink-0">
+                {onDeck ? (
+                  <DraggablePlayer id={onDeck.id}>
+                    <InactivePlayerCard key={onDeck.id} player={onDeck} />
+                  </DraggablePlayer>
+                ) : showOnDeckPlaceholder ? (
+                  <DropPlaceholder />
+                ) : (
+                  <div><EmptyPlayerCard /></div>
+                )}
+              </div>
+
+              <div className="w-px h-8 bg-slate-900 shrink-0 mx-1"></div>
+
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1">
+                {tail.map(p => (
+                  <DraggablePlayer key={p.id} id={p.id}>
+                    <div className="shrink-0 grayscale opacity-40">
+                      <InactivePlayerCard player={p} />
+                    </div>
+                  </DraggablePlayer>
+                ))}
+                {showQueuePlaceholder && <DropPlaceholder />}
+                {!isOver && tail.length === 0 && <div className="text-[8px] font-bold text-slate-800 uppercase italic self-center">Queue Empty</div>}
+              </div>
+            </div>
           </div>
-
-          <div className="flex items-center gap-2 min-h-[44px] px-1">
-            <div className="w-28 shrink-0">
-              {onIce ? (
-                <DraggablePlayer id={onIce.id}>
-                  <ActivePlayerCard key={onIce.id} player={onIce} />
-                </DraggablePlayer>
-              ) : (
-                <div><EmptyPlayerCard type="active" /></div>
-              )}
-            </div>
-
-            <ChevronRight className="w-3 h-3 text-slate-800 shrink-0" />
-
-            <div className="w-28 shrink-0">
-              {onDeck ? (
-                <DraggablePlayer id={onDeck.id}>
-                  <InactivePlayerCard key={onDeck.id} player={onDeck} />
-                </DraggablePlayer>
-              ) : (
-                <div><EmptyPlayerCard /></div>
-              )}
-            </div>
-
-            <div className="w-px h-8 bg-slate-900 shrink-0 mx-1"></div>
-
-            <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 flex-1">
-              {tail.map(p => (
-                <DraggablePlayer key={p.id} id={p.id}>
-                  <div className="shrink-0 grayscale opacity-40">
-                    <InactivePlayerCard player={p} />
-                  </div>
-                </DraggablePlayer>
-              ))}
-              {isOver && (
-                <div className="w-28 h-[48px] shrink-0 rounded-md border-2 border-dashed border-blue-500/50 bg-blue-500/10 flex items-center justify-center">
-                  <span className="text-[9px] font-bold text-blue-400 uppercase">Drop Here</span>
-                </div>
-              )}
-              {!isOver && tail.length === 0 && <div className="text-[8px] font-bold text-slate-800 uppercase italic self-center">Queue Empty</div>}
-            </div>
-          </div>
-        </div>
-      )}
+        );
+      }}
     </DroppableLane>
   );
 };
@@ -143,11 +150,7 @@ const Bench: React.FC = () => {
                 </div>
               </DraggablePlayer>
             ))}
-            {isOver && (
-              <div className="w-28 h-[48px] rounded-md border-2 border-dashed border-blue-500/50 bg-blue-500/10 flex items-center justify-center">
-                <span className="text-[9px] font-bold text-blue-400 uppercase">Drop Here</span>
-              </div>
-            )}
+            {isOver && <DropPlaceholder />}
             {!isOver && benchPlayers.length === 0 && <span className="text-[10px] text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
           </div>
         )}
