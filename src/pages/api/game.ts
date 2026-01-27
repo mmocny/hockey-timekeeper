@@ -29,29 +29,23 @@ export const GET: APIRoute = async ({ locals, url }) => {
         repo.getAllPlayers(),
         repo.getGameState()
       ]);
-      return new Response(JSON.stringify({ players, gameState }), {
+      return new Response(JSON.stringify({ players, gameState, serverTime: Date.now() / 1000 }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Timeout reached, return empty 304 or just the current state?
-    // Returning current state ensures eventual consistency even if we missed the edge trigger
-    // But returning 304 Not Modified is cleaner for bandwidth.
-    // Let's stick to returning JSON to simplify client logic (it just overwrites).
-    // Or we can return a specific "no change" signal.
-    // Simplest for now: Return the current state anyway. It's safer.
-    
+    // Timeout reached
     const [players, gameState] = await Promise.all([
       repo.getAllPlayers(),
       repo.getGameState()
     ]);
-    return new Response(JSON.stringify({ players, gameState }), {
+    return new Response(JSON.stringify({ players, gameState, serverTime: Date.now() / 1000 }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (e) {
     // Fallback if DB is not initialized locally
-    return new Response(JSON.stringify({ players: [], gameState: { is_paused: 1, game_time: 0, updated_at: 0 } }), { status: 200 });
+    return new Response(JSON.stringify({ players: [], gameState: { is_paused: 1, game_time: 0, updated_at: 0 }, serverTime: Date.now() / 1000 }), { status: 200 });
   }
 };
 

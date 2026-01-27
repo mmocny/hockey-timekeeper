@@ -1,7 +1,7 @@
 import React, { useEffect, useOptimistic, useTransition, use, useState } from 'react';
 import { useStore } from '@nanostores/react';
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor } from '@dnd-kit/core';
-import { playersStore, isPaused as isPausedStore, gameTime as gameTimeStore, updatedAt as updatedAtStore, startPolling, abortPolling, commitLocalUpdate } from '../lib/client/store';
+import { playersStore, isPaused as isPausedStore, gameTime as gameTimeStore, updatedAt as updatedAtStore, clockSkew as clockSkewStore, startPolling, abortPolling, commitLocalUpdate } from '../lib/client/store';
 import * as serverActions from '../lib/client/actions';
 import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { DraggablePlayer } from './DraggablePlayer';
@@ -222,6 +222,7 @@ export const App: React.FC = () => {
   const serverPaused = useStore(isPausedStore);
   const serverGameTime = useStore(gameTimeStore);
   const serverUpdatedAt = useStore(updatedAtStore);
+  const serverClockSkew = useStore(clockSkewStore);
   const playerList = Object.values(serverPlayers);
 
   // 2. Setup Optimistic State
@@ -454,7 +455,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <GameContext.Provider value={{ players: optimisticPlayers, isPaused: optimisticPaused, gameTime: optimisticGameTime, updatedAt: serverUpdatedAt, actions: gameActions }}>
+    <GameContext.Provider value={{ players: optimisticPlayers, isPaused: optimisticPaused, gameTime: optimisticGameTime, updatedAt: serverUpdatedAt, clockSkew: serverClockSkew, actions: gameActions }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className={`flex flex-col select-none ${isPending ? 'cursor-progress' : ''}`}>
                   <GlobalControls />

@@ -6,6 +6,7 @@ export interface GameContextType {
   isPaused: boolean;
   gameTime: number;
   updatedAt: number;
+  clockSkew: number;
   actions: {
     switchLane: (lane: number) => void;
     switchAll: () => void;

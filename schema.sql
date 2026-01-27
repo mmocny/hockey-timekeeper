@@ -36,8 +36,7 @@ INSERT INTO players (id, name, number, lane, queue_order, last_shift_started) VA
 ('11', 'Cross', '15', 4, 1, NULL),
 ('12', 'Grayson Adams', '16', 6, 1, NULL),
 ('13', 'Naawakmig', '17', 6, 2, NULL),
-('14', 'Maajiikwis', '18', 6, 3, NULL),
-('15', 'Goalie Bob', '30', 5, 0, NULL);
+('14', 'Maajiikwis', '18', 6, 3, NULL);
 
 INSERT INTO game_state (id, is_paused, game_time, updated_at) VALUES 
 ('active_game', 1, 0, strftime('%s', 'now'));
