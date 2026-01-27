@@ -105,7 +105,7 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
 const Bench: React.FC = () => {
   const { players, actions } = use(GameContext)!;
   const benchPlayers = players
-    .filter(p => p.lane === 5)
+    .filter(p => p.lane === 6)
     .sort((a, b) => a.queue_order - b.queue_order);
 
   return (
@@ -117,7 +117,7 @@ const Bench: React.FC = () => {
             <div 
               key={p.id} 
               onClick={() => {
-                const lane = prompt('Assign to lane (0:C, 1:LW, 2:RW, 3:LD, 4:RD)?');
+                const lane = prompt('Assign to lane (0:C, 1:LW, 2:RW, 3:LD, 4:RD, 5:G)?');
                 if (lane !== null) actions.moveLane(p.id, parseInt(lane));
               }}
             >
@@ -242,7 +242,7 @@ export const App: React.FC = () => {
       const updates: Record<string, Partial<Player>> = {};
 
       optimisticPlayers.forEach(p => {
-        const isOnIce = p.lane !== null && p.lane < 5 && p.queue_order === 0;
+        const isOnIce = p.lane !== null && p.lane < 6 && p.queue_order === 0;
         if (!isOnIce) return;
 
         if (next) { // Pausing
@@ -293,7 +293,7 @@ export const App: React.FC = () => {
         </div>
 
         <div className="space-y-1">
-          {[0, 1, 2, 3, 4].map(idx => (
+          {[0, 1, 2, 3, 4, 5].map(idx => (
             <LaneRow key={idx} laneIdx={idx} />
           ))}
         </div>

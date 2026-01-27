@@ -27,4 +27,4 @@ export const API_ACTIONS = {
   RESET_GAME: 'reset_game',
 } as const;
 
-export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Bench'];
+export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench'];

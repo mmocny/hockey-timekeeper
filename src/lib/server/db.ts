@@ -130,7 +130,7 @@ export class GameRepository {
     if (isPaused) {
       // Pausing: Finalize time for all active players
       const onIcePlayersResult = await this.db.prepare(
-        "SELECT * FROM players WHERE queue_order = 0 AND lane < 5"
+        "SELECT * FROM players WHERE queue_order = 0 AND lane < 6"
       ).all<Player>();
       
       for (const player of onIcePlayersResult.results) {
@@ -144,7 +144,7 @@ export class GameRepository {
     } else {
       // Resuming: Start clock for all active players
       await this.db.prepare(
-        "UPDATE players SET last_shift_started = ? WHERE queue_order = 0 AND lane < 5"
+        "UPDATE players SET last_shift_started = ? WHERE queue_order = 0 AND lane < 6"
       ).bind(now).run();
     }
 
