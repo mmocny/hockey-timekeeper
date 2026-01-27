@@ -82,7 +82,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
         break;
 
       case API_ACTIONS.MOVE_LANE:
-        await repo.moveLane(payload.id, payload.lane);
+        await repo.moveLane(payload.id, payload.lane, now);
         break;
 
       case API_ACTIONS.RESET_GAME:

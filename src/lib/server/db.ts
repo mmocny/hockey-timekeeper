@@ -71,19 +71,69 @@ export class GameRepository {
     ).bind(now).run();
   }
 
-  async moveLane(id: string, lane: number) {
+  async normalizeLane(lane: number, now: number) {
+    const players = await this.getLanePlayers(lane);
+    const gameState = await this.getGameState();
+
+    for (let i = 0; i < players.length; i++) {
+      const p = players[i];
+      if (p.queue_order !== i) {
+        let lastShiftStarted = p.last_shift_started;
+        // If moving TO 0 (On Ice) and game is active, start clock
+        if (i === 0 && lane < 6 && !gameState.is_paused) {
+           lastShiftStarted = now;
+        }
+        await this.db.prepare(
+          "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
+        ).bind(i, lastShiftStarted, p.id).run();
+      }
+    }
+  }
+
+  async moveLane(id: string, lane: number, now: number) {
+    const player = await this.db.prepare("SELECT * FROM players WHERE id = ?").bind(id).first<Player>();
+    if (!player) return;
+
+    const gameState = await this.getGameState();
+
+    // Finalize time if active
+    let newTotalTime = player.total_time;
+    if (player.last_shift_started && !gameState.is_paused) {
+      newTotalTime += (now - player.last_shift_started);
+    }
+
+    // Determine new order (append to end)
     const maxOrderResult = await this.db.prepare(
       "SELECT MAX(queue_order) as maxOrder FROM players WHERE lane = ?"
     ).bind(lane).first<{ maxOrder: number }>();
-    
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
-    await this.db.prepare(
-      "UPDATE players SET lane = ?, queue_order = ?, last_shift_started = NULL WHERE id = ?"
-    ).bind(lane, nextOrder, id).run();
+    // Check if moving to On Ice immediately (empty lane)
+    let lastShiftStarted = null;
+    if (nextOrder === 0 && lane < 6 && !gameState.is_paused) {
+      lastShiftStarted = now;
+    }
 
-    // Signal update
-    await this.updateGameState({}, Math.floor(Date.now() / 1000));
+    await this.db.prepare(
+      "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, last_shift_started = ? WHERE id = ?"
+    ).bind(lane, nextOrder, newTotalTime, lastShiftStarted, id).run();
+
+    // Re-index the OLD lane to close gaps and promote next player to On Ice
+    if (player.lane !== lane || nextOrder !== player.queue_order) {
+       await this.normalizeLane(player.lane, now);
+    }
+    
+    // If we moved within the same lane (drag to back), the normalizeLane above handles the gap.
+    // Wait, if I moved to same lane, I appended to end (e.g. from 0 to 5).
+    // The gap is at 0.
+    // normalizeLane(lane) will see:
+    // Old 1 -> New 0. (Starts clock).
+    // Old 2 -> New 1.
+    // ...
+    // The moved player is at 5. It stays at 5 (matches i=5).
+    // This seems correct.
+
+    await this.updateGameState({}, now);
   }
 
   async switchLane(lane: number, now: number) {
