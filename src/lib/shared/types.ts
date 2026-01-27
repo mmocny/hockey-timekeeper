@@ -25,6 +25,7 @@ export const API_ACTIONS = {
   MOVE_LANE: 'move_lane',
   TOGGLE_PAUSE: 'toggle_pause',
   RESET_GAME: 'reset_game',
+  SYNC_CLOCK: 'sync_clock',
 } as const;
 
-export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench'];
+export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench', 'Absent'];

@@ -28,7 +28,7 @@ export const Stats: React.FC<Props> = ({ players, isPaused }) => {
   }).sort((a, b) => b.currentTotal - a.currentTotal);
 
   return (
-    <section className="mt-12 px-2">
+    <section className="mt-2 px-2">
       <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-4 border-b border-slate-900 pb-2">
         Ice Time Leaderboard
       </h2>

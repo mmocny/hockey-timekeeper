@@ -3,6 +3,8 @@ import { type Player } from '../shared/types';
 
 export const playersStore = map<Record<string, Player>>({});
 export const isPaused = atom(true);
+export const gameTime = atom(0);
+export const updatedAt = atom(0);
 export const lastUpdate = atom(0); // Server-side updated_at timestamp
 
 let isPolling = false;
@@ -48,6 +50,8 @@ export function updateGameStore(data: any) {
   const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, p]));
   playersStore.set(playersMap);
   isPaused.set(!!data.gameState.is_paused);
+  gameTime.set(data.gameState.game_time || 0);
+  updatedAt.set(data.gameState.updated_at || 0);
   
   const serverTs = data.gameState.updated_at || 0;
   if (serverTs > currentTs) {

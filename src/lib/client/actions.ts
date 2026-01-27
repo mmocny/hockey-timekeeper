@@ -38,3 +38,7 @@ export async function toggleGlobalPause(target?: boolean) {
 export async function resetGame() {
   await performServerAction(API_ACTIONS.RESET_GAME);
 }
+
+export async function syncClock(direction: 'up' | 'down') {
+  await performServerAction(API_ACTIONS.SYNC_CLOCK, { direction });
+}

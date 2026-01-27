@@ -88,6 +88,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       case API_ACTIONS.RESET_GAME:
         await repo.resetGame(now);
         break;
+
+      case API_ACTIONS.SYNC_CLOCK:
+        await repo.syncClock(payload.direction, now);
+        break;
     }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });

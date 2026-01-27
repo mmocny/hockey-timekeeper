@@ -30,7 +30,7 @@ export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
   const totalDisplay = formatTime(player.total_time + elapsed);
 
   return (
-    <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-blue-600 border-blue-400 text-white shadow-md">
+    <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 bg-blue-600 border-blue-400 text-white shadow-md">
       <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
           <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
           <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
@@ -51,7 +51,7 @@ export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
 };
 
 export const InactivePlayerCard: React.FC<Props> = ({ player }) => (
-  <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-28 bg-slate-900 border-slate-800 text-slate-300">
+  <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 bg-slate-900 border-slate-800 text-slate-300">
     <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
       <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
       <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
@@ -69,7 +69,7 @@ export const InactivePlayerCard: React.FC<Props> = ({ player }) => (
 );
 
 export const EmptyPlayerCard: React.FC<{ type?: 'active' | 'inactive' }> = ({ type = 'inactive' }) => (
-  <div className={`w-28 h-[48px] rounded-md border border-dashed flex items-center justify-center text-[9px] font-bold uppercase select-none ${
+  <div className={`w-36 h-[48px] rounded-md border border-dashed flex items-center justify-center text-[9px] font-bold uppercase select-none ${
     type === 'active' 
       ? 'border-slate-800 text-slate-700 bg-slate-950/50' 
       : 'border-slate-900 text-slate-800 bg-transparent'

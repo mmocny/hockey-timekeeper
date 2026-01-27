@@ -1,33 +1,57 @@
-import React, { use } from 'react';
+import React, { use, useState, useEffect } from 'react';
 import { GameContext } from '../lib/client/context';
-import { Play, Pause, RefreshCcw } from 'lucide-react';
+import { RefreshCcw, Clock, Plus, Minus } from 'lucide-react';
+
+const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
 export const GlobalControls: React.FC = () => {
-  const { isPaused, actions } = use(GameContext)!;
+  const { isPaused, gameTime, updatedAt, actions } = use(GameContext)!;
+  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    if (isPaused) return;
+    const interval = setInterval(() => {
+      setNow(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPaused]);
+
+  // If paused, time is static gameTime.
+  // If active, time is gameTime + (now - last_start_time).
+  const totalTime = isPaused ? gameTime : gameTime + Math.max(0, now - updatedAt);
 
   return (
-    <div className="flex gap-3 mb-6">
-      {/* Master Game Clock Control */}
-      <button
-        onClick={() => actions.toggleGlobalPause()}
-        className={`flex-1 py-6 rounded-2xl flex items-center justify-center gap-4 transition-all active:scale-[0.98] ${
-          !isPaused
-            ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20'
-            : 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-900/20'
-        }`}
-      >
-        {!isPaused ? (
-          <>
-            <Pause className="w-8 h-8 fill-current" />
-            <span className="text-xl font-black uppercase tracking-widest leading-none">Pause</span>
-          </>
-        ) : (
-          <>
-            <Play className="w-8 h-8 fill-current" />
-            <span className="text-xl font-black uppercase tracking-widest leading-none">Resume</span>
-          </>
-        )}
-      </button>
+    <div className="flex gap-3 mb-4">
+      {/* Game Clock Group */}
+      <div className="flex-1 flex gap-1">
+        <button
+          onClick={() => actions.syncClock('down')}
+          className="px-2 rounded-l-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center active:scale-95 transition-all"
+        >
+          <Minus className="w-4 h-4 text-slate-400" />
+        </button>
+        
+        <button
+          onClick={() => actions.toggleGlobalPause()}
+          className={`flex-1 py-6 flex items-center justify-center gap-4 transition-all active:scale-[0.98] ${
+            !isPaused
+              ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-900/20'
+              : 'bg-amber-600 hover:bg-amber-500 shadow-lg shadow-amber-900/20'
+          }`}
+        >
+          <Clock className={`w-8 h-8 fill-current ${!isPaused ? 'animate-pulse' : ''}`} />
+          <span className="text-3xl font-mono font-black tracking-widest leading-none">
+            {formatTime(totalTime)}
+          </span>
+        </button>
+
+        <button
+          onClick={() => actions.syncClock('up')}
+          className="px-2 rounded-r-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center active:scale-95 transition-all"
+        >
+          <Plus className="w-4 h-4 text-slate-400" />
+        </button>
+      </div>
 
       {/* Switch All Shifts */}
       <button

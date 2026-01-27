@@ -90,6 +90,35 @@ export class GameRepository {
     }
   }
 
+  async syncClock(direction: 'up' | 'down', now: number) {
+    const gameState = await this.getGameState();
+    
+    // Calculate current total time
+    let totalTime = gameState.game_time;
+    if (!gameState.is_paused) {
+      totalTime += (now - gameState.updated_at);
+    }
+
+    const seconds = totalTime % 60;
+    let delta = 0;
+
+    if (direction === 'down') {
+      // Snap down to previous minute
+      delta = seconds === 0 ? -60 : -seconds;
+    } else {
+      // Snap up to next minute
+      delta = seconds === 0 ? 60 : (60 - seconds);
+    }
+
+    // Apply delta to game_time (base offset)
+    // Ensure we don't go negative total time
+    if (totalTime + delta < 0) {
+      delta = -totalTime;
+    }
+
+    await this.updateGameState({ game_time: gameState.game_time + delta }, now);
+  }
+
   async moveLane(id: string, lane: number, now: number) {
     const player = await this.db.prepare("SELECT * FROM players WHERE id = ?").bind(id).first<Player>();
     if (!player) return;
@@ -178,7 +207,7 @@ export class GameRepository {
     if (gameState.is_paused === isPaused) return;
 
     if (isPaused) {
-      // Pausing: Finalize time for all active players
+      // Pausing: Finalize time for all active players AND game clock
       const onIcePlayersResult = await this.db.prepare(
         "SELECT * FROM players WHERE queue_order = 0 AND lane < 6"
       ).all<Player>();
@@ -191,13 +220,19 @@ export class GameRepository {
           ).bind(addedTime, player.id).run();
         }
       }
+
+      // Update game clock
+      const sessionDuration = now - gameState.updated_at;
+      await this.updateGameState({ is_paused: true, game_time: gameState.game_time + sessionDuration }, now);
+
     } else {
       // Resuming: Start clock for all active players
       await this.db.prepare(
         "UPDATE players SET last_shift_started = ? WHERE queue_order = 0 AND lane < 6"
       ).bind(now).run();
+      
+      // Update state (sets updated_at to now, which becomes the new start time)
+      await this.updateGameState({ is_paused: false }, now);
     }
-
-    await this.updateGameState({ is_paused: isPaused }, now);
   }
 }
