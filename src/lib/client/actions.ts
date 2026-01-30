@@ -45,3 +45,7 @@ export async function resetGame() {
 export async function syncWallClock(newTime: number) {
   await performServerAction(API_ACTIONS.SYNC_WALL_CLOCK, { newTime });
 }
+
+export async function togglePenalty(id: string) {
+  await performServerAction(API_ACTIONS.TOGGLE_PENALTY, { id });
+}

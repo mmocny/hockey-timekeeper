@@ -11,6 +11,7 @@ CREATE TABLE players (
   queue_order INTEGER DEFAULT 0, -- 0 is always "On Ice" for lanes 0-5
   total_time INTEGER DEFAULT 0,
   total_penalty_time INTEGER DEFAULT 0,
+  is_serving_penalty BOOLEAN DEFAULT 0,
   last_shift_started INTEGER
 );
 

@@ -80,7 +80,7 @@ export class GameRepository {
   }
 
   async resetGame(now: number) {
-    await this.db.prepare("UPDATE players SET total_time = 0, total_penalty_time = 0, last_shift_started = NULL").run();
+    await this.db.prepare("UPDATE players SET total_time = 0, total_penalty_time = 0, is_serving_penalty = 0, last_shift_started = NULL").run();
     await this.db.prepare(
       "UPDATE game_state SET is_paused = 1, base_game_time = 0, last_resume_time = 0, updated_at = ? WHERE id = 'active_game'"
     ).bind(now).run();
@@ -93,15 +93,27 @@ export class GameRepository {
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
-      // Force all penalty box players to be active
-      const isActive = (i === 0 && lane < 6) || (lane === 8);
+      // Standard sequential ordering
+      const newOrder = i;
+      
+      // Determine Active Status
+      // Lane 8 (Legacy Penalty) - treat as active if we still use it, but we are moving away.
+      // Lanes 0-5 active if order is 0.
+      // Additionally, if is_serving_penalty is true, they are active (timer running).
+      // But we generally only allow penalty on active players (order 0).
+      // So checking order 0 is sufficient for "Is this the active slot".
+      // Then is_serving_penalty determines WHICH bucket it counts to.
+      
+      // But wait, if we have [PenaltyPlayer, Player B] in lane.
+      // PenaltyPlayer is order 0.
+      // Player B is order 1.
+      // PenaltyPlayer is active (Penalty Timer).
+      // Player B is NOT active.
+      
+      const isActive = (newOrder === 0 && lane < 6);
       
       let lastShiftStarted = p.last_shift_started;
       if (isActive) {
-         // If becoming active and wasn't before (or just to be safe), set start time.
-         // For existing active players, we usually preserve start time.
-         // But if we are re-normalizing, we might be correcting order.
-         // If `lastShiftStarted` is null and should be active, set it.
          if (lastShiftStarted === null || lastShiftStarted === undefined) {
             lastShiftStarted = gameTime;
          }
@@ -109,11 +121,10 @@ export class GameRepository {
          lastShiftStarted = null;
       }
 
-      // If order changed or status changed, update
-      if (p.queue_order !== i || p.last_shift_started !== lastShiftStarted) {
+      if (p.queue_order !== newOrder || p.last_shift_started !== lastShiftStarted) {
         await this.db.prepare(
           "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
-        ).bind(i, lastShiftStarted, p.id).run();
+        ).bind(newOrder, lastShiftStarted, p.id).run();
       }
     }
   }
@@ -123,22 +134,53 @@ export class GameRepository {
     const currentElapsedTime = this._calculateGameTime(gameState, now);
     const delta = newElapsedTime - currentElapsedTime;
 
-    // Update active shifts so elapsed time remains constant
-    // S_new = S_old + delta
     await this.db.prepare(
       "UPDATE players SET last_shift_started = last_shift_started + ? WHERE last_shift_started IS NOT NULL"
     ).bind(delta).run();
 
-    // If game is paused, newElapsedTime is just the accumulated base
     let newBaseTime = newElapsedTime;
-    
-    // If game is active, newElapsedTime = base + (now - resume).
-    // So base = newElapsedTime - (now - resume).
     if (!gameState.is_paused) {
       newBaseTime = newElapsedTime - (now - gameState.last_resume_time);
     }
 
     await this.updateGameState({ base_game_time: newBaseTime }, now);
+  }
+
+  async togglePenalty(id: string, now: number) {
+    const player = await this.db.prepare("SELECT * FROM players WHERE id = ?").bind(id).first<Player>();
+    if (!player) return;
+
+    const gameState = await this.getGameState();
+    const gameTime = this._calculateGameTime(gameState, now);
+
+    let nextTotalTime = player.total_time;
+    let nextTotalPenalty = player.total_penalty_time || 0;
+
+    // Accumulate time for current state
+    if (player.last_shift_started !== null && player.last_shift_started !== undefined) {
+      const elapsed = gameTime - player.last_shift_started;
+      if (player.is_serving_penalty) {
+        nextTotalPenalty += elapsed;
+      } else {
+        nextTotalTime += elapsed;
+      }
+    }
+
+    const nextIsServing = !player.is_serving_penalty;
+    
+    // Determine if timer should be running
+    // Player must be "On Ice" (Order 0, Lane < 6) to have a running timer in either state.
+    // If they are on Bench, toggling penalty doesn't start a timer?
+    // User said "dropping on penalty box... leave them in on ice state".
+    // So we assume they are On Ice.
+    const isActive = (player.queue_order === 0 && player.lane < 6) && !gameState.is_paused;
+    const lastShiftStarted = isActive ? gameTime : null;
+
+    await this.db.prepare(
+      "UPDATE players SET total_time = ?, total_penalty_time = ?, is_serving_penalty = ?, last_shift_started = ? WHERE id = ?"
+    ).bind(nextTotalTime, nextTotalPenalty, nextIsServing ? 1 : 0, lastShiftStarted, id).run();
+    
+    await this.updateGameState({}, now);
   }
 
   async moveLane(id: string, lane: number, now: number) {
@@ -151,10 +193,9 @@ export class GameRepository {
     let nextTotalTime = player.total_time;
     let nextTotalPenalty = player.total_penalty_time || 0;
 
-    // If player was active, calculate elapsed and add to appropriate bucket
     if (player.last_shift_started !== null && player.last_shift_started !== undefined) {
       const elapsed = gameTime - player.last_shift_started;
-      if (player.lane === 8) {
+      if (player.is_serving_penalty) {
         nextTotalPenalty += elapsed;
       } else {
         nextTotalTime += elapsed;
@@ -166,25 +207,20 @@ export class GameRepository {
     ).bind(lane).first<{ maxOrder: number }>();
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
-    // Determine if player will be active in new lane
-    // Lane 8 (Penalty) is always active. Lanes 0-5 are active if order 0.
-    const isActive = (nextOrder === 0 && lane < 6) || (lane === 8);
-    const lastShiftStarted = isActive ? gameTime : null;
+    const isActive = (nextOrder === 0 && lane < 6);
+    const lastShiftStarted = isActive && !gameState.is_paused ? gameTime : null;
+
+    // When moving, clear penalty status? Usually yes.
+    // If dragging to Bench, clears penalty.
+    // If dragging to another line, clears penalty (fresh start).
+    const nextIsServing = 0;
 
     await this.db.prepare(
-      "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, total_penalty_time = ?, last_shift_started = ? WHERE id = ?"
-    ).bind(lane, nextOrder, nextTotalTime, nextTotalPenalty, lastShiftStarted, id).run();
+      "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, total_penalty_time = ?, is_serving_penalty = ?, last_shift_started = ? WHERE id = ?"
+    ).bind(lane, nextOrder, nextTotalTime, nextTotalPenalty, nextIsServing, lastShiftStarted, id).run();
 
     if (player.lane !== lane || nextOrder !== player.queue_order) {
        await this.normalizeLane(player.lane, now);
-       // Also normalize target lane to ensure consistency? 
-       // `normalizeLane(lane, now)` might be redundant if we just appended, but safe.
-       // Actually `nextOrder` is append, so order is fine. But let's be safe.
-       if (player.lane === 8 || lane === 8) {
-          // If we moved out of or into penalty, normalize might be needed to trigger logic for others?
-          // Not strictly for "others" unless "others" change status.
-          // But `normalizeLane` handles `isActive` logic for everyone.
-       }
     }
     
     await this.updateGameState({}, now);
@@ -193,6 +229,11 @@ export class GameRepository {
   async switchLane(lane: number, now: number) {
     const players = await this.getLanePlayers(lane);
     if (players.length === 0) return;
+
+    // Check for Penalty - Lock the line
+    if (players.some(p => p.is_serving_penalty)) {
+        return;
+    }
 
     const gameState = await this.getGameState();
     const gameTime = this._calculateGameTime(gameState, now);
@@ -213,7 +254,7 @@ export class GameRepository {
     for (let i = 1; i < players.length; i++) {
       const p = players[i];
       const newOrder = p.queue_order - 1;
-      const lastShiftStarted = (newOrder === 0) ? gameTime : null;
+      const lastShiftStarted = (newOrder === 0 && !gameState.is_paused) ? gameTime : null;
 
       await this.db.prepare(
         "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"

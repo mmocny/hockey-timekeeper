@@ -99,6 +99,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
       case API_ACTIONS.SYNC_WALL_CLOCK: // New action for direct wall clock sync
         await repo.syncWallClock(payload.newTime, now);
         break;
+
+      case API_ACTIONS.TOGGLE_PENALTY:
+        await repo.togglePenalty(payload.id, now);
+        break;
     }
 
     return new Response(JSON.stringify({ success: true, serverTime: Date.now() / 1000 }), { status: 200 });

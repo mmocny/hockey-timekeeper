@@ -141,10 +141,52 @@ export function useGameController() {
       });
     },
 
+    togglePenalty: (id: string) => {
+      const gameTime = gameClockModel.getCurrentElapsed();
+      const player = optimisticPlayers.find(p => p.id === id);
+      if (!player) return;
+
+      const nextIsServing = !player.is_serving_penalty;
+      let nextTotalTime = player.total_time;
+      let nextTotalPenalty = player.total_penalty_time || 0;
+
+      if (player.last_shift_started !== undefined) {
+        const elapsed = gameTime - player.last_shift_started;
+        if (player.is_serving_penalty) {
+          nextTotalPenalty += elapsed;
+        } else {
+          nextTotalTime += elapsed;
+        }
+      }
+
+      // Check if timer should be running
+      const isActive = (player.queue_order === 0 && player.lane < 6) && !gameClockModel.getPausedState();
+      
+      const updates: Record<string, Partial<Player>> = {
+        [id]: { 
+          is_serving_penalty: nextIsServing,
+          total_time: nextTotalTime,
+          total_penalty_time: nextTotalPenalty,
+          last_shift_started: isActive ? gameTime : undefined
+        }
+      };
+
+      abortPolling();
+      commitLocalCacheUpdate(updates, {}, gameClockModel);
+
+      startTransition(async () => {
+        setOptimisticPlayers({ type: 'update_players', updates });
+        await serverActions.togglePenalty(id);
+      });
+    },
+
     switchLane: (lane: number) => {
       const gameTime = gameClockModel.getCurrentElapsed();
       const lanePlayers = optimisticPlayers.filter(p => p.lane === lane).sort((a, b) => a.queue_order - b.queue_order);
       if (lanePlayers.length === 0) return;
+
+      // Lock line if penalty
+      if (lanePlayers.some(p => p.is_serving_penalty)) return;
 
       const current = lanePlayers[0];
       const maxOrder = Math.max(...lanePlayers.map(p => p.queue_order));
@@ -184,6 +226,9 @@ export function useGameController() {
         const lanePlayers = optimisticPlayers.filter(p => p.lane === lane).sort((a, b) => a.queue_order - b.queue_order);
         if (lanePlayers.length === 0) continue;
 
+        // Lock line if penalty
+        if (lanePlayers.some(p => p.is_serving_penalty)) continue;
+
         const current = lanePlayers[0];
         const maxOrder = Math.max(...lanePlayers.map(p => p.queue_order));
 
@@ -216,6 +261,12 @@ export function useGameController() {
     },
 
     moveLane: (id: string, lane: number) => {
+      // Intercept drag to Penalty (Lane 8) -> Toggle Penalty instead
+      if (lane === 8) {
+        actions.togglePenalty(id);
+        return;
+      }
+
       const gameTime = gameClockModel.getCurrentElapsed();
       
       const updates: Record<string, Partial<Player>> = {};
@@ -262,7 +313,7 @@ export function useGameController() {
 
       if (player.last_shift_started !== undefined) {
          const elapsed = gameTime - player.last_shift_started;
-         if (player.lane === 8) {
+         if (player.is_serving_penalty) {
             nextTotalPenalty += elapsed;
          } else {
             nextTotalTime += elapsed;
@@ -274,6 +325,7 @@ export function useGameController() {
         queue_order: nextOrder, 
         total_time: nextTotalTime,
         total_penalty_time: nextTotalPenalty,
+        is_serving_penalty: false, // Reset penalty on move
         last_shift_started: ((nextOrder === 0 && lane < 6) || lane === 8) ? gameTime : undefined 
       };
       

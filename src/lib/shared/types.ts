@@ -6,6 +6,7 @@ export interface Player {
   queue_order: number;
   total_time: number;
   total_penalty_time: number;
+  is_serving_penalty: boolean;
   last_shift_started?: number;
 }
 
@@ -28,6 +29,7 @@ export const API_ACTIONS = {
   TOGGLE_PAUSE: 'toggle_pause',
   RESET_GAME: 'reset_game',
   SYNC_WALL_CLOCK: 'sync_wall_clock',
+  TOGGLE_PENALTY: 'toggle_penalty',
 } as const;
 
 export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench', 'Absent', 'Penalty'];
