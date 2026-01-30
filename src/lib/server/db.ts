@@ -170,10 +170,8 @@ export class GameRepository {
     
     // Determine if timer should be running
     // Player must be "On Ice" (Order 0, Lane < 6) to have a running timer in either state.
-    // If they are on Bench, toggling penalty doesn't start a timer?
-    // User said "dropping on penalty box... leave them in on ice state".
-    // So we assume they are On Ice.
-    const isActive = (player.queue_order === 0 && player.lane < 6) && !gameState.is_paused;
+    // Even if paused, we set start time to current GameTime so elapsed is 0.
+    const isActive = (player.queue_order === 0 && player.lane < 6);
     const lastShiftStarted = isActive ? gameTime : null;
 
     await this.db.prepare(
@@ -208,7 +206,7 @@ export class GameRepository {
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
     const isActive = (nextOrder === 0 && lane < 6);
-    const lastShiftStarted = isActive && !gameState.is_paused ? gameTime : null;
+    const lastShiftStarted = isActive ? gameTime : null;
 
     // When moving, clear penalty status? Usually yes.
     // If dragging to Bench, clears penalty.
@@ -254,7 +252,7 @@ export class GameRepository {
     for (let i = 1; i < players.length; i++) {
       const p = players[i];
       const newOrder = p.queue_order - 1;
-      const lastShiftStarted = (newOrder === 0 && !gameState.is_paused) ? gameTime : null;
+      const lastShiftStarted = (newOrder === 0) ? gameTime : null;
 
       await this.db.prepare(
         "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
@@ -278,7 +276,12 @@ export class GameRepository {
 
     } else {
       // Resuming
-      // No player updates needed!
+      // If we are resuming after a reset (or any state where active players have NULL start time),
+      // we must anchor them to the current game time so they start accumulating.
+      const gameTime = gameState.base_game_time;
+      await this.db.prepare(
+        "UPDATE players SET last_shift_started = ? WHERE last_shift_started IS NULL AND ((queue_order = 0 AND lane < 6) OR is_serving_penalty = 1)"
+      ).bind(gameTime).run();
       
       await this.updateGameState({ is_paused: false, last_resume_time: now }, now);
     }

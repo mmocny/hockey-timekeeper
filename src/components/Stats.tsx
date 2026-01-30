@@ -15,8 +15,8 @@ export const Stats: React.FC<Props> = ({ players }) => {
   const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
   const sortedPlayers = [...players].map(p => {
-    let currentTotal = p.total_time;
-    if (p.last_shift_started !== undefined) {
+    let currentTotal = p.total_time + (p.total_penalty_time || 0);
+    if (typeof p.last_shift_started === 'number') {
       currentTotal += Math.max(0, currentDisplayTime - p.last_shift_started);
     }
     return { ...p, currentTotal };
@@ -33,7 +33,7 @@ export const Stats: React.FC<Props> = ({ players }) => {
             <div className="flex items-center gap-2 overflow-hidden">
               <span className="text-slate-500 font-mono w-4 italic">#{p.number}</span>
               <span className="font-bold text-slate-300 truncate uppercase">{p.name}</span>
-              {p.last_shift_started !== undefined && (
+              {typeof p.last_shift_started === 'number' && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="On Ice" />
               )}
             </div>

@@ -10,21 +10,28 @@ interface Props {
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
 export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
-  const { gameClockModel } = use(GameContext)!;
+  const { gameClockModel, actions } = use(GameContext)!;
   const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
-  const isPenalty = player.lane === 8;
+  const isPenalty = player.is_serving_penalty;
 
-  const elapsed = player.last_shift_started !== undefined 
+  const elapsed = typeof player.last_shift_started === 'number'
     ? Math.max(0, currentDisplayTime - player.last_shift_started)
     : 0;
 
-  const baseTime = isPenalty ? (player.total_penalty_time || 0) : player.total_time;
-  const totalDisplay = formatTime(baseTime + elapsed);
+  const totalSum = player.total_time + (player.total_penalty_time || 0) + elapsed;
+  const totalDisplay = formatTime(totalSum);
 
   return (
-    <div className={`relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 text-white shadow-md ${
-      isPenalty ? 'bg-red-600 border-red-400' : 'bg-blue-600 border-blue-400'
+    <div 
+      onClick={(e) => {
+        if (isPenalty) {
+          e.stopPropagation();
+          actions.togglePenalty(player.id);
+        }
+      }}
+      className={`relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 text-white shadow-md ${
+      isPenalty ? 'bg-red-600 border-red-400 cursor-pointer hover:bg-red-500' : 'bg-blue-600 border-blue-400'
     }`}>
       <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
           <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
@@ -56,7 +63,7 @@ export const InactivePlayerCard: React.FC<Props> = ({ player }) => (
       <div className="h-3 mb-1" />
       <div className="flex items-center gap-0.5">
         <span className="text-[8px] font-mono leading-none text-slate-500">
-          Σ {formatTime(player.total_time)}
+          Σ {formatTime(player.total_time + (player.total_penalty_time || 0))}
         </span>
       </div>
     </div>
