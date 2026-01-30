@@ -111,6 +111,14 @@ export class GameRepository {
 
   async syncWallClock(newElapsedTime: number, now: number) {
     const gameState = await this.getGameState();
+    const currentElapsedTime = this._calculateGameTime(gameState, now);
+    const delta = newElapsedTime - currentElapsedTime;
+
+    // Update active shifts so elapsed time remains constant
+    // S_new = S_old + delta
+    await this.db.prepare(
+      "UPDATE players SET last_shift_started = last_shift_started + ? WHERE last_shift_started IS NOT NULL"
+    ).bind(delta).run();
 
     // If game is paused, newElapsedTime is just the accumulated base
     let newBaseTime = newElapsedTime;

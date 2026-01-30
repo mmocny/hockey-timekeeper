@@ -256,9 +256,22 @@ export const App: React.FC = () => {
       gameActions.syncWallClock(newTargetTime);
     },
     syncWallClock: (newTime: number) => {
+      const oldTime = gameClockModel.getCurrentElapsed();
+      const delta = newTime - oldTime;
+      
+      const updates: Record<string, Partial<Player>> = {};
+      optimisticPlayers.forEach(p => {
+        if (p.last_shift_started !== undefined) {
+          updates[p.id] = { last_shift_started: p.last_shift_started + delta };
+        }
+      });
+      
       abortPolling();
       gameClockModel.syncToWallClock(newTime); // Update model immediately
+      commitLocalUpdate(updates); // Commit player shifts
+
       startTransition(async () => {
+        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.syncWallClock(newTime);
       });
     },
