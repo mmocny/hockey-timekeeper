@@ -8,6 +8,7 @@ import { DropPlaceholder } from './DropPlaceholder';
 import { GlobalControls } from './GlobalControls';
 import { InstructionsModal } from './InstructionsModal';
 import { Stats } from './Stats';
+import { NeedsIceTimeStats } from './NeedsIceTimeStats';
 import { LANE_NAMES, type Player } from '../lib/shared/types';
 import { RotateCcw, ChevronRight, Info } from 'lucide-react';
 
@@ -238,7 +239,8 @@ export const GameLayout: React.FC<{ isPending: boolean, isLoading: boolean }> = 
 
         <Bench />
 
-        <Stats players={players} isPaused={false} />
+        {/* <Stats players={players} isPaused={false} /> */}
+        <NeedsIceTimeStats players={players} isPaused={false} />
 
         <div className="mt-8 mb-8 flex justify-center gap-4">
           <button 

@@ -25,26 +25,42 @@ export const InstructionsModal: React.FC<Props> = ({ isOpen, onClose }) => {
         <div className="p-6 space-y-6 text-slate-400 text-sm leading-relaxed overflow-y-auto max-h-[70vh]">
           
           <section>
-            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Game Controls</h3>
-            <p>Use the large buttons at the top to <strong>Start/Pause</strong> the game clock or <strong>Switch All Lines</strong> at once.</p>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Game Clock</h3>
+            <p>Tap the large clock to <strong>Start/Pause</strong>. Use the <strong>+ / -</strong> buttons to adjust seconds manually. The clock state is synchronized across all devices.</p>
           </section>
 
           <section>
-            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Managing Lines</h3>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Line Changes</h3>
             <ul className="list-disc pl-4 space-y-1">
-              <li><strong>Tap a Row:</strong> Shifts the "On Deck" player onto the ice and moves the current player to the back of the queue.</li>
-              <li><strong>Drag & Drop:</strong> Drag any player card to move them between lines or reorder them within the bench.</li>
+              <li><strong>Switch Lane:</strong> Tap any lane row (e.g., "CENTER") to rotate the "On Deck" player onto the ice.</li>
+              <li><strong>Switch All:</strong> Tap the big refresh button at the top to rotate all skating lines simultaneously.</li>
+              <li><span className="text-red-400 font-bold">Note:</span> Lines with a player serving a penalty are locked and will not rotate.</li>
             </ul>
           </section>
 
           <section>
-            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Time Tracking</h3>
-            <p>Player clocks run automatically when they are in the first "On Ice" slot while the game is active. The dashboard shows current shift time and total game time (Σ).</p>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Drag & Drop</h3>
+            <p>You can drag any player card to move them between lines, to the bench, or to reorder the queue. The entire list scrolls horizontally to accommodate long lines.</p>
           </section>
 
           <section>
-            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Bench</h3>
-            <p>Players not assigned to a specific line sit on the Bench. Drag them into a lane to assign them.</p>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Penalties</h3>
+            <ul className="list-disc pl-4 space-y-1">
+              <li><strong>Start Penalty:</strong> Drag an "On Ice" player to the red <strong>"Drag Here for Penalty"</strong> box (next to the Goalie).</li>
+              <li>The player card will turn <strong className="text-red-400">RED</strong> and start accumulating Penalty Minutes (PIM).</li>
+              <li><strong>End Penalty:</strong> Tap the red player card to return them to normal play.</li>
+              <li><strong>Move:</strong> Dragging a penalty player to another lane (like the Bench) will clear the penalty.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Goalie</h3>
+            <p>To swap goalies, simply drag a new player onto the <strong>Goalie</strong> slot. The existing goalie will automatically move to the Bench.</p>
+          </section>
+
+          <section>
+            <h3 className="text-slate-200 font-bold mb-2 uppercase text-xs tracking-wider">Bench & Absent</h3>
+            <p>Players not currently in a lineup sit in the <strong>Bench / Absent</strong> area at the bottom. They do not accumulate time.</p>
           </section>
 
         </div>
