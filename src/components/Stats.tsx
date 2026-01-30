@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { use } from 'react';
+import { useStore } from '@nanostores/react';
+import { GameContext } from '../lib/client/context';
 import type { Player } from '../lib/shared/types';
 
 interface Props {
@@ -8,21 +10,14 @@ interface Props {
 
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-export const Stats: React.FC<Props> = ({ players, isPaused }) => {
-  const [now, setNow] = useState(Math.floor(Date.now() / 1000));
-
-  useEffect(() => {
-    if (isPaused) return;
-    const interval = setInterval(() => {
-      setNow(Math.floor(Date.now() / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPaused]);
+export const Stats: React.FC<Props> = ({ players }) => {
+  const { gameClockModel } = use(GameContext)!;
+  const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
   const sortedPlayers = [...players].map(p => {
     let currentTotal = p.total_time;
-    if (p.last_shift_started && !isPaused) {
-      currentTotal += Math.max(0, now - p.last_shift_started);
+    if (p.last_shift_started !== undefined) {
+      currentTotal += Math.max(0, currentDisplayTime - p.last_shift_started);
     }
     return { ...p, currentTotal };
   }).sort((a, b) => b.currentTotal - a.currentTotal);
@@ -38,7 +33,7 @@ export const Stats: React.FC<Props> = ({ players, isPaused }) => {
             <div className="flex items-center gap-2 overflow-hidden">
               <span className="text-slate-500 font-mono w-4 italic">#{p.number}</span>
               <span className="font-bold text-slate-300 truncate uppercase">{p.name}</span>
-              {p.last_shift_started && !isPaused && (
+              {p.last_shift_started !== undefined && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" title="On Ice" />
               )}
             </div>

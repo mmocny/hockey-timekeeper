@@ -263,7 +263,7 @@ export const App: React.FC = () => {
       });
     },
     switchLane: (lane: number) => {
-      const now = Math.floor(Date.now() / 1000);
+      const gameTime = gameClockModel.getCurrentElapsed();
       const lanePlayers = optimisticPlayers.filter(p => p.lane === lane).sort((a, b) => a.queue_order - b.queue_order);
       if (lanePlayers.length === 0) return;
 
@@ -274,16 +274,16 @@ export const App: React.FC = () => {
       lanePlayers.forEach(p => {
         if (p.id === current.id) {
           let newTotal = p.total_time;
-          if (p.last_shift_started && !gameClockModel.getPausedState()) { // Use model's paused state
-            newTotal += (now - gameClockModel.getAdjustedNow()); // Need adjusted now
+          if (p.last_shift_started !== undefined) { 
+            newTotal += (gameTime - p.last_shift_started);
           }
           updates[p.id] = { queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
         } else {
           const newOrder = p.queue_order - 1;
-          const isNowActive = newOrder === 0 && !gameClockModel.getPausedState();
+          const isNowActive = newOrder === 0;
           updates[p.id] = { 
             queue_order: newOrder, 
-            last_shift_started: isNowActive ? gameClockModel.getAdjustedNow() : undefined 
+            last_shift_started: isNowActive ? gameTime : undefined 
           };
         }
       });
@@ -297,7 +297,7 @@ export const App: React.FC = () => {
       });
     },
     switchAll: () => {
-      const now = Math.floor(Date.now() / 1000);
+      const gameTime = gameClockModel.getCurrentElapsed();
       const updates: Record<string, Partial<Player>> = {};
 
       for (let lane = 0; lane < 5; lane++) {
@@ -310,17 +310,17 @@ export const App: React.FC = () => {
         lanePlayers.forEach(p => {
           if (p.id === current.id) {
             let newTotal = p.total_time;
-            if (p.last_shift_started && !gameClockModel.getPausedState()) {
-              newTotal += (now - gameClockModel.getAdjustedNow()); // Need adjusted now
+            if (p.last_shift_started !== undefined) {
+              newTotal += (gameTime - p.last_shift_started);
             }
             updates[p.id] = { ...updates[p.id], queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
           } else {
             const newOrder = p.queue_order - 1;
-            const isNowActive = newOrder === 0 && !gameClockModel.getPausedState();
+            const isNowActive = newOrder === 0;
             updates[p.id] = { 
               ...updates[p.id],
               queue_order: newOrder, 
-              last_shift_started: isNowActive ? gameClockModel.getAdjustedNow() : undefined 
+              last_shift_started: isNowActive ? gameTime : undefined 
             };
           }
         });
@@ -335,11 +335,23 @@ export const App: React.FC = () => {
       });
     },
     moveLane: (id: string, lane: number) => {
+      const gameTime = gameClockModel.getCurrentElapsed();
       const targetLanePlayers = optimisticPlayers.filter(p => p.lane === lane);
       const nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
       
+      const player = optimisticPlayers.find(p => p.id === id);
+      let newTotal = player?.total_time || 0;
+      if (player?.last_shift_started !== undefined) {
+         newTotal += (gameTime - player.last_shift_started);
+      }
+
       const updates: Record<string, Partial<Player>> = {
-        [id]: { lane, queue_order: nextOrder, last_shift_started: undefined }
+        [id]: { 
+          lane, 
+          queue_order: nextOrder, 
+          total_time: newTotal,
+          last_shift_started: (nextOrder === 0 && lane < 6) ? gameTime : undefined 
+        }
       };
 
       abortPolling();
@@ -351,26 +363,11 @@ export const App: React.FC = () => {
       });
     },
     toggleGlobalPause: () => {
-      const next = !gameClockModel.getPausedState(); // Use model's paused state
-      const updates: Record<string, Partial<Player>> = {};
-
-      optimisticPlayers.forEach(p => {
-        const isOnIce = p.lane !== null && p.lane < 6 && p.queue_order === 0;
-        if (!isOnIce) return;
-
-        if (next) { // Pausing
-          let newTotal = p.total_time;
-          if (p.last_shift_started) {
-            newTotal += (gameClockModel.getAdjustedNow() - p.last_shift_started); // Use adjusted now
-          }
-          updates[p.id] = { total_time: newTotal, last_shift_started: undefined };
-        } else { // Resuming
-          updates[p.id] = { last_shift_started: gameClockModel.getAdjustedNow() }; // Use adjusted now
-        }
-      });
+      const next = !gameClockModel.getPausedState();
+      // No player updates needed! Game Time logic handles it.
 
       abortPolling();
-      commitLocalUpdate(updates, { is_paused: next }); // Pass is_paused to commit, GameClockModel will handle
+      commitLocalUpdate({}, { is_paused: next }); 
 
       startTransition(async () => {
         setOptimisticPaused(next);
@@ -386,7 +383,7 @@ export const App: React.FC = () => {
       optimisticPlayers.forEach(p => {
         updates[p.id] = { total_time: 0, last_shift_started: undefined };
       });
-      commitLocalUpdate(updates, { is_paused: true, base_game_time: 0, last_resume_time: 0, current_elapsed_time: 0 }); // Use current_elapsed_time for model reset
+      commitLocalUpdate(updates, { is_paused: true, base_game_time: 0, last_resume_time: 0, current_elapsed_time: 0 }); 
 
       startTransition(async () => {
         setOptimisticPlayers({ type: 'reset_game' });

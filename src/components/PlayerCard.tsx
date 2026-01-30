@@ -1,4 +1,5 @@
-import React, { useState, useEffect, use } from 'react';
+import React, { use } from 'react';
+import { useStore } from '@nanostores/react';
 import { GameContext } from '../lib/client/context';
 import type { Player } from '../lib/shared/types';
 
@@ -9,23 +10,12 @@ interface Props {
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
 export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
-  const { isPaused } = use(GameContext)!;
-  const [elapsed, setElapsed] = useState(0);
+  const { gameClockModel } = use(GameContext)!;
+  const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
-  useEffect(() => {
-    if (isPaused || !player.last_shift_started) {
-      setElapsed(0);
-      return;
-    }
-
-    const update = () => {
-      setElapsed(Math.max(0, Math.floor(Date.now() / 1000) - player.last_shift_started!));
-    };
-    
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [isPaused, player.last_shift_started]);
+  const elapsed = player.last_shift_started !== undefined 
+    ? Math.max(0, currentDisplayTime - player.last_shift_started)
+    : 0;
 
   const totalDisplay = formatTime(player.total_time + elapsed);
 

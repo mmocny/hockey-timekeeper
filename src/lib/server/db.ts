@@ -4,6 +4,13 @@ import type { Player, GameState } from '../shared/types';
 export class GameRepository {
   constructor(private db: D1Database) {}
 
+  private _calculateGameTime(gameState: GameState, now: number): number {
+    if (gameState.is_paused) {
+      return gameState.base_game_time;
+    }
+    return gameState.base_game_time + (now - gameState.last_resume_time);
+  }
+
   async getAllPlayers(): Promise<Player[]> {
     const result = await this.db.prepare(
       "SELECT * FROM players ORDER BY lane ASC, queue_order ASC"
@@ -82,13 +89,18 @@ export class GameRepository {
   async normalizeLane(lane: number, now: number) {
     const players = await this.getLanePlayers(lane);
     const gameState = await this.getGameState();
+    const gameTime = this._calculateGameTime(gameState, now);
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
       if (p.queue_order !== i) {
         let lastShiftStarted = p.last_shift_started;
-        if (i === 0 && lane < 6 && !gameState.is_paused) {
-           lastShiftStarted = now;
+        if (i === 0 && lane < 6) {
+           // If becoming active (0), set start time to current GAME time if not already set?
+           // Actually, if we are normalizing, we assume shift starts NOW if it wasn't already active?
+           // This is tricky. normalizeLane usually runs after a move.
+           // If moved to pos 0, shift starts.
+           lastShiftStarted = gameTime;
         }
         await this.db.prepare(
           "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
@@ -105,14 +117,7 @@ export class GameRepository {
     
     // If game is active, newElapsedTime = base + (now - resume).
     // So base = newElapsedTime - (now - resume).
-    // BUT, we can also just shift the `last_resume_time` or shift `base_game_time`.
-    // Shifting `base_game_time` is cleaner because `last_resume_time` usually marks the actual event.
-    // However, if we shift `base_game_time`, we must respect the current `last_resume_time`.
-    
     if (!gameState.is_paused) {
-      // elapsed = base + (now - resume)
-      // new_elapsed = new_base + (now - resume)
-      // new_base = new_elapsed - (now - resume)
       newBaseTime = newElapsedTime - (now - gameState.last_resume_time);
     }
 
@@ -124,10 +129,11 @@ export class GameRepository {
     if (!player) return;
 
     const gameState = await this.getGameState();
+    const gameTime = this._calculateGameTime(gameState, now);
 
     let newTotalTime = player.total_time;
-    if (player.last_shift_started && !gameState.is_paused) {
-      newTotalTime += (now - player.last_shift_started);
+    if (player.last_shift_started !== null && player.last_shift_started !== undefined) {
+      newTotalTime += (gameTime - player.last_shift_started);
     }
 
     const maxOrderResult = await this.db.prepare(
@@ -136,8 +142,8 @@ export class GameRepository {
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
     let lastShiftStarted = null;
-    if (nextOrder === 0 && lane < 6 && !gameState.is_paused) {
-      lastShiftStarted = now;
+    if (nextOrder === 0 && lane < 6) {
+      lastShiftStarted = gameTime;
     }
 
     await this.db.prepare(
@@ -156,12 +162,13 @@ export class GameRepository {
     if (players.length === 0) return;
 
     const gameState = await this.getGameState();
+    const gameTime = this._calculateGameTime(gameState, now);
     const currentOnIce = players[0];
 
     if (currentOnIce) {
       let newTotalTime = currentOnIce.total_time;
-      if (currentOnIce.last_shift_started && !gameState.is_paused) {
-        newTotalTime += (now - currentOnIce.last_shift_started);
+      if (currentOnIce.last_shift_started !== null && currentOnIce.last_shift_started !== undefined) {
+        newTotalTime += (gameTime - currentOnIce.last_shift_started);
       }
       await this.updatePlayer(currentOnIce.id, {
         queue_order: players.length - 1,
@@ -173,7 +180,7 @@ export class GameRepository {
     for (let i = 1; i < players.length; i++) {
       const p = players[i];
       const newOrder = p.queue_order - 1;
-      const lastShiftStarted = (newOrder === 0 && !gameState.is_paused) ? now : null;
+      const lastShiftStarted = (newOrder === 0) ? gameTime : null;
 
       await this.db.prepare(
         "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
@@ -189,31 +196,16 @@ export class GameRepository {
 
     if (isPaused) {
       // Pausing
-      const onIcePlayersResult = await this.db.prepare(
-        "SELECT * FROM players WHERE queue_order = 0 AND lane < 6"
-      ).all<Player>();
+      // No player updates needed! Shifts are defined by GameTime start.
+      // GameTime stops progressing, so shift duration stops increasing.
       
-      for (const player of onIcePlayersResult.results) {
-        if (player.last_shift_started) {
-          const addedTime = now - player.last_shift_started;
-          await this.db.prepare(
-            "UPDATE players SET total_time = total_time + ?, last_shift_started = NULL WHERE id = ?"
-          ).bind(addedTime, player.id).run();
-        }
-      }
-
-      // Update game clock: Add duration of current segment to base
-      // duration = now - last_resume_time
       const sessionDuration = now - gameState.last_resume_time;
       await this.updateGameState({ is_paused: true, base_game_time: gameState.base_game_time + sessionDuration }, now);
 
     } else {
       // Resuming
-      await this.db.prepare(
-        "UPDATE players SET last_shift_started = ? WHERE queue_order = 0 AND lane < 6"
-      ).bind(now).run();
+      // No player updates needed!
       
-      // Update state: Set last_resume_time to now. base_game_time stays same.
       await this.updateGameState({ is_paused: false, last_resume_time: now }, now);
     }
   }
