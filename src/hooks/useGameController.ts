@@ -360,7 +360,12 @@ export function useGameController() {
       abortPolling();
       const updates: Record<string, Partial<Player>> = {};
       optimisticPlayers.forEach(p => {
-        updates[p.id] = { total_time: 0, last_shift_started: undefined };
+        updates[p.id] = { 
+          total_time: 0, 
+          total_penalty_time: 0,
+          is_serving_penalty: false,
+          last_shift_started: undefined 
+        };
       });
       commitLocalCacheUpdate(updates, { is_paused: true, base_game_time: 0, last_resume_time: 0, current_elapsed_time: 0 }, gameClockModel);
 
