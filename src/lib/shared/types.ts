@@ -10,7 +10,8 @@ export interface Player {
 
 export interface GameState {
   is_paused: boolean;
-  game_time: number;
+  base_game_time: number; // Seconds accumulated while paused/before current active segment
+  last_resume_time: number; // Timestamp (seconds) when the clock was last resumed
   updated_at: number;
 }
 
@@ -25,7 +26,7 @@ export const API_ACTIONS = {
   MOVE_LANE: 'move_lane',
   TOGGLE_PAUSE: 'toggle_pause',
   RESET_GAME: 'reset_game',
-  SYNC_CLOCK: 'sync_clock',
+  SYNC_WALL_CLOCK: 'sync_wall_clock',
 } as const;
 
 export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench', 'Absent'];

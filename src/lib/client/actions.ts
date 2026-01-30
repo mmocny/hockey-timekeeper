@@ -42,6 +42,6 @@ export async function resetGame() {
   await performServerAction(API_ACTIONS.RESET_GAME);
 }
 
-export async function syncClock(direction: 'up' | 'down') {
-  await performServerAction(API_ACTIONS.SYNC_CLOCK, { direction });
+export async function syncWallClock(newTime: number) {
+  await performServerAction(API_ACTIONS.SYNC_WALL_CLOCK, { newTime });
 }

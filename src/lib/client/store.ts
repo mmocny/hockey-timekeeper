@@ -1,17 +1,24 @@
 import { atom, map } from 'nanostores';
 import { type Player } from '../shared/types';
+import { GameClockModel, serverClockState } from './GameClockModel';
 
 export const playersStore = map<Record<string, Player>>({});
-export const isPaused = atom(true);
-export const gameTime = atom(0);
-export const updatedAt = atom(0);
-export const lastUpdate = atom(0); // Server-side updated_at timestamp
-export const clockSkew = atom(0); // Difference between client and server time (Client - Server)
+export const isPaused = atom(true); // Still used by other components
+export const clockSkew = atom(0); // Still used to initialize GameClockModel (or passed to it)
 
 let isPolling = false;
 let currentTs = 0;
 let currentController: AbortController | null = null;
 let pendingActions = 0;
+
+// Instantiate GameClockModel once
+// It will be initialized with actual data once first sync is complete
+// This is not exported, but managed internally or passed via context
+export const gameClockModel = new GameClockModel(
+  serverClockState.get(), // Initial state will be replaced by first onServerUpdate
+  0 // initial skew will be replaced by first onServerUpdate
+);
+
 
 export function incrementPending() {
   pendingActions++;
@@ -20,13 +27,13 @@ export function incrementPending() {
 
 export function decrementPending() {
   pendingActions = Math.max(0, pendingActions - 1);
-  // If we hit 0, the poll loop (which is sleeping) will wake up naturally or we can nudge it?
-  // The loop is just retrying or sleeping.
 }
 
 export function startPolling() {
   if (isPolling) return;
   isPolling = true;
+  // Initialize GameClockModel with latest server state
+  gameClockModel.onServerUpdate(serverClockState.get(), clockSkew.get());
   pollLoop();
   
   document.addEventListener('visibilitychange', () => {
@@ -66,7 +73,7 @@ async function pollLoop() {
   }
 }
 
-export function commitLocalUpdate(playerUpdates: Record<string, Partial<Player>> = {}, gameStateUpdates: Partial<{ is_paused: boolean; game_time: number; updated_at: number }> = {}) {
+export function commitLocalUpdate(playerUpdates: Record<string, Partial<Player>> = {}, gameStateUpdates: Partial<{ is_paused?: boolean; base_game_time?: number; last_resume_time?: number; current_elapsed_time?: number }> = {}) {
   // 1. Update Players
   if (Object.keys(playerUpdates).length > 0) {
     const currentPlayers = playersStore.get();
@@ -80,60 +87,67 @@ export function commitLocalUpdate(playerUpdates: Record<string, Partial<Player>>
     playersStore.set(newPlayers);
   }
 
-  // 2. Update Game State
-  // Force update regardless of threshold because this is a local user action
+  // 2. Update Game State (Clock related parts go to GameClockModel)
+  // These calls will directly update GameClockModel's internal state for immediate display.
+  // GameClockModel handles `_isSyncInitiator` flags.
+  if (gameStateUpdates.is_paused !== undefined) gameClockModel.togglePause(gameStateUpdates.is_paused);
+  if (gameStateUpdates.current_elapsed_time !== undefined) {
+    gameClockModel.syncToWallClock(gameStateUpdates.current_elapsed_time);
+  } else if (gameStateUpdates.base_game_time !== undefined && gameStateUpdates.last_resume_time !== undefined && !gameClockModel.getPausedState()) {
+    // This case handles explicit base_game_time update during running, usually from sync.
+    // However, syncToWallClock will handle the UI input.
+    // For now, let's keep it simple: syncToWallClock is only for user input.
+    // Server updates go through onServerUpdate.
+  }
+  
+  // Always update isPaused Nanostore for other components that might rely on it.
   if (gameStateUpdates.is_paused !== undefined) isPaused.set(gameStateUpdates.is_paused);
-  if (gameStateUpdates.game_time !== undefined) gameTime.set(gameStateUpdates.game_time);
-  if (gameStateUpdates.updated_at !== undefined) updatedAt.set(gameStateUpdates.updated_at);
 }
 
-export function updateGameStore(data: any) {
+export async function updateGameStore(data: any) {
   if (!data || !data.players || !data.gameState) return;
 
   const playersMap = Object.fromEntries(data.players.map((p: any) => [p.id, p]));
   playersStore.set(playersMap);
   
-  // Update Clock Skew
+  // Update Clock Skew (feed to GameClockModel)
+  let newClockSkew = clockSkew.get();
   if (data.serverTime) {
     const clientNow = Date.now() / 1000;
-    const newSkew = clientNow - data.serverTime;
-    const currentSkew = clockSkew.get();
-    
-    // Only update skew if we have no skew yet, or if drift is significant (>1s)
-    // This prevents network jitter from causing the clock to jump around on every poll.
-    if (currentSkew === 0 || Math.abs(newSkew - currentSkew) > 1) {
-      clockSkew.set(newSkew);
-    }
+    newClockSkew = clientNow - data.serverTime;
   }
   
-  // Game State Sync with Jitter Protection
-  const serverPaused = !!data.gameState.is_paused;
-  const serverGameTime = data.gameState.game_time || 0;
-  const serverUpdatedAt = data.gameState.updated_at || 0;
+  // Feed server's authoritative state to GameClockModel
+  gameClockModel.onServerUpdate(
+    {
+      is_paused: !!data.gameState.is_paused,
+      base_game_time: data.gameState.base_game_time || 0,
+      last_resume_time: data.gameState.last_resume_time || 0,
+      current_elapsed_time: data.gameState.current_elapsed_time || 0,
+    },
+    newClockSkew // Pass current calculated skew
+  );
 
-  // Always sync paused state
-  isPaused.set(serverPaused);
-
-  // Calculate projected time to check for drift
-  const localGameTime = gameTime.get();
-  const localUpdatedAt = updatedAt.get();
+  // Still update isPaused Nanostore for other components that might rely on it.
+  isPaused.set(gameClockModel.getPausedState());
   
-  // Only sync time if there's a significant drift (>1s) or if state changed (pause/resume)
-  // or if we just have no local state yet (init).
-  // Note: timestamps are in seconds.
-  const isStateChange = serverPaused !== isPaused.get();
-  const timeDrift = Math.abs(serverGameTime - localGameTime);
-  const startDrift = Math.abs(serverUpdatedAt - localUpdatedAt);
+  // Update serverClockState Nanostore for other components that might rely on raw server data.
+  serverClockState.set({
+    is_paused: !!data.gameState.is_paused,
+    base_game_time: data.gameState.base_game_time || 0,
+    last_resume_time: data.gameState.last_resume_time || 0,
+    current_elapsed_time: data.gameState.current_elapsed_time || 0,
+  });
 
-  if (isStateChange || timeDrift > 1 || startDrift > 1) {
-    gameTime.set(serverGameTime);
-    updatedAt.set(serverUpdatedAt);
-  }
-  
-  const serverTs = data.gameState.updated_at || 0;
+  const serverTs = data.gameState.updated_at || 0; // Use updated_at for currentTs
   if (serverTs > currentTs) {
     currentTs = serverTs;
-    lastUpdate.set(currentTs);
+  }
+  
+  // If server returned invalid timestamp (0), likely DB error or init state. 
+  // Force a delay to prevent hot loop denial-of-service on self.
+  if (serverTs === 0) {
+    await new Promise(r => setTimeout(r, 1000));
   }
 }
 
@@ -145,7 +159,7 @@ export async function syncWithServer(signal?: AbortSignal) {
       throw new Error(`HTTP ${res.status}`);
     }
     const data = await res.json();
-    updateGameStore(data);
+    await updateGameStore(data);
   } catch (err) {
     throw err; // Propagate to loop to handle backoff
   }

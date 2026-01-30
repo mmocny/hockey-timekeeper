@@ -1,7 +1,8 @@
-import React, { useEffect, useOptimistic, useTransition, use, useState } from 'react';
+import React, { useEffect, useOptimistic, useTransition, use, useState, useRef } from 'react';
 import { useStore } from '@nanostores/react';
 import { DndContext, type DragEndEvent, type DragStartEvent, DragOverlay, useSensor, useSensors, MouseSensor, TouchSensor } from '@dnd-kit/core';
-import { playersStore, isPaused as isPausedStore, gameTime as gameTimeStore, updatedAt as updatedAtStore, clockSkew as clockSkewStore, startPolling, abortPolling, commitLocalUpdate } from '../lib/client/store';
+import { playersStore, isPaused as isPausedStore, clockSkew as clockSkewStore, startPolling, abortPolling, commitLocalUpdate, gameClockModel } from '../lib/client/store'; // gameClockModel is directly imported
+import { GameClockModel, serverClockState } from '../lib/client/GameClockModel';
 import * as serverActions from '../lib/client/actions';
 import { ActivePlayerCard, InactivePlayerCard, EmptyPlayerCard } from './PlayerCard';
 import { DraggablePlayer } from './DraggablePlayer';
@@ -30,16 +31,6 @@ function playerReducer(state: Player[], action: PlayerAction): Player[] {
       });
     }
     case 'set_pause': {
-      // Logic for pausing is handled by gameActions calculating the new state or just the flag
-      // But we need to update last_shift_started if pausing/resuming?
-      // Actually, if we use explicit 'update_players' for everything, we might not need this?
-      // But toggle_pause affects ALL active players.
-      // Let's keep it simple: toggle_pause logic can also be pre-calculated!
-      // But wait, the hook 'optimisticPaused' is separate.
-      // So this reducer is ONLY for players.
-      // The pause state is handled by the other useOptimistic.
-      // However, we DO need to update 'last_shift_started' on players when pausing.
-      // So 'update_players' is sufficient!
       return state;
     }
     case 'reset_game': {
@@ -155,7 +146,7 @@ const Bench: React.FC = () => {
                             </div>
                           </DraggablePlayer>            ))}
             {isOver && <DropPlaceholder />}
-            {!isOver && benchPlayers.length === 0 && <span className="text-[10px] text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
+            {!isOver && benchPlayers.length === 0 && <span className="text-[10px] font-bold text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
           </div>
         )}
       </DroppableLane>
@@ -188,7 +179,7 @@ const Absent: React.FC = () => {
               </DraggablePlayer>
             ))}
             {isOver && <DropPlaceholder />}
-            {!isOver && absentPlayers.length === 0 && <span className="text-[10px] text-slate-700 font-bold uppercase p-2">No Absent Players</span>}
+            {!isOver && absentPlayers.length === 0 && <span className="text-[10px] font-bold text-slate-700 font-bold uppercase p-2">No Absent Players</span>}
           </div>
         )}
       </DroppableLane>
@@ -199,7 +190,7 @@ const Absent: React.FC = () => {
 // --- Main App ---
 
 export const App: React.FC = () => {
-  useEffect(() => { startPolling(); }, []);
+  useEffect(() => { startPolling(), gameClockModel.startTicker(); }, []);
 
   // Configure sensors for better mobile scrolling
   const mouseSensor = useSensor(MouseSensor, {
@@ -220,10 +211,19 @@ export const App: React.FC = () => {
   // 1. Read Server State
   const serverPlayers = useStore(playersStore);
   const serverPaused = useStore(isPausedStore);
-  const serverGameTime = useStore(gameTimeStore);
-  const serverUpdatedAt = useStore(updatedAtStore);
-  const serverClockSkew = useStore(clockSkewStore);
+  // Remove gameTime, updatedAt, clockSkew from direct useStore access
+  const serverClockSkew = useStore(clockSkewStore); // Keep this for initializing GameClockModel
   const playerList = Object.values(serverPlayers);
+
+  // Initialize GameClockModel once, pass initial state
+  const gameClockModelRef = useRef<GameClockModel | null>(null);
+  if (!gameClockModelRef.current) {
+    gameClockModelRef.current = new GameClockModel(serverClockState.get(), serverClockSkew);
+  }
+  const gameClockModel = gameClockModelRef.current;
+  
+  // Use a useStore hook to read the current display time from the model's reactive currentDisplayTime atom
+  const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
   // 2. Setup Optimistic State
   const [optimisticPlayers, setOptimisticPlayers] = useOptimistic(
@@ -236,11 +236,6 @@ export const App: React.FC = () => {
     (state, newState: boolean) => newState
   );
 
-  const [optimisticGameTime, setOptimisticGameTime] = useOptimistic(
-    serverGameTime,
-    (state, delta: number) => state + delta
-  );
-
   // 3. Setup Transitions
   const [isPending, startTransition] = useTransition();
   const [activePlayer, setActivePlayer] = useState<Player | null>(null);
@@ -249,27 +244,22 @@ export const App: React.FC = () => {
   // 4. Define Actions
   const gameActions = {
     syncClock: (direction: 'up' | 'down') => {
-      const now = Math.floor(Date.now() / 1000);
-      const currentTotal = optimisticGameTime + (optimisticPaused ? 0 : now - serverUpdatedAt);
-      const seconds = currentTotal % 60;
+      const currentDisplayedTime = gameClockModel.currentDisplayTime.get();
+      const seconds = currentDisplayedTime % 60;
       let delta = 0;
       
       if (direction === 'down') delta = seconds === 0 ? -60 : -seconds;
       else delta = seconds === 0 ? 60 : (60 - seconds);
 
-      if (currentTotal + delta < 0) delta = -currentTotal;
+      const newTargetTime = Math.max(0, currentDisplayedTime + delta);
       
-      const newGameTime = optimisticGameTime + delta;
-
-      // 1. Kill stale poll
+      gameActions.syncWallClock(newTargetTime);
+    },
+    syncWallClock: (newTime: number) => {
       abortPolling();
-      // 2. Commit to local store (base state)
-      commitLocalUpdate({}, { game_time: newGameTime });
-
+      gameClockModel.syncToWallClock(newTime); // Update model immediately
       startTransition(async () => {
-        // 3. Optimistic update (redundant but keeps UI consistent during transition)
-        setOptimisticGameTime(delta);
-        await serverActions.syncClock(direction);
+        await serverActions.syncWallClock(newTime);
       });
     },
     switchLane: (lane: number) => {
@@ -284,16 +274,16 @@ export const App: React.FC = () => {
       lanePlayers.forEach(p => {
         if (p.id === current.id) {
           let newTotal = p.total_time;
-          if (p.last_shift_started && !optimisticPaused) {
-            newTotal += (now - p.last_shift_started);
+          if (p.last_shift_started && !gameClockModel.getPausedState()) { // Use model's paused state
+            newTotal += (now - gameClockModel.getAdjustedNow()); // Need adjusted now
           }
           updates[p.id] = { queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
         } else {
           const newOrder = p.queue_order - 1;
-          const isNowActive = newOrder === 0 && !optimisticPaused;
+          const isNowActive = newOrder === 0 && !gameClockModel.getPausedState();
           updates[p.id] = { 
             queue_order: newOrder, 
-            last_shift_started: isNowActive ? now : undefined 
+            last_shift_started: isNowActive ? gameClockModel.getAdjustedNow() : undefined 
           };
         }
       });
@@ -320,17 +310,17 @@ export const App: React.FC = () => {
         lanePlayers.forEach(p => {
           if (p.id === current.id) {
             let newTotal = p.total_time;
-            if (p.last_shift_started && !optimisticPaused) {
-              newTotal += (now - p.last_shift_started);
+            if (p.last_shift_started && !gameClockModel.getPausedState()) {
+              newTotal += (now - gameClockModel.getAdjustedNow()); // Need adjusted now
             }
             updates[p.id] = { ...updates[p.id], queue_order: maxOrder + 1, total_time: newTotal, last_shift_started: undefined };
           } else {
             const newOrder = p.queue_order - 1;
-            const isNowActive = newOrder === 0 && !optimisticPaused;
+            const isNowActive = newOrder === 0 && !gameClockModel.getPausedState();
             updates[p.id] = { 
               ...updates[p.id],
               queue_order: newOrder, 
-              last_shift_started: isNowActive ? now : undefined 
+              last_shift_started: isNowActive ? gameClockModel.getAdjustedNow() : undefined 
             };
           }
         });
@@ -361,15 +351,8 @@ export const App: React.FC = () => {
       });
     },
     toggleGlobalPause: () => {
-      const next = !optimisticPaused;
-      const now = Math.floor(Date.now() / 1000);
+      const next = !gameClockModel.getPausedState(); // Use model's paused state
       const updates: Record<string, Partial<Player>> = {};
-      let gameTimeUpdate = optimisticGameTime;
-
-      if (next) { // Pausing
-        // Update Game Time
-        gameTimeUpdate += (now - serverUpdatedAt);
-      }
 
       optimisticPlayers.forEach(p => {
         const isOnIce = p.lane !== null && p.lane < 6 && p.queue_order === 0;
@@ -378,28 +361,19 @@ export const App: React.FC = () => {
         if (next) { // Pausing
           let newTotal = p.total_time;
           if (p.last_shift_started) {
-            newTotal += (now - p.last_shift_started);
+            newTotal += (gameClockModel.getAdjustedNow() - p.last_shift_started); // Use adjusted now
           }
           updates[p.id] = { total_time: newTotal, last_shift_started: undefined };
         } else { // Resuming
-          updates[p.id] = { last_shift_started: now };
+          updates[p.id] = { last_shift_started: gameClockModel.getAdjustedNow() }; // Use adjusted now
         }
       });
 
       abortPolling();
-      commitLocalUpdate(updates, { is_paused: next, game_time: gameTimeUpdate, updated_at: now });
+      commitLocalUpdate(updates, { is_paused: next }); // Pass is_paused to commit, GameClockModel will handle
 
       startTransition(async () => {
         setOptimisticPaused(next);
-        // Note: We don't have an optimisticGameTime setter for absolute value here easily?
-        // Actually, we do: setOptimisticGameTime(delta).
-        // Since we updated the base store, we don't strictly need to update optimisticGameTime if we pass 0?
-        // Or better, we can update it.
-        // But our reducer is `state + delta`.
-        // If we update base, base changes.
-        // `useOptimistic` resets.
-        // So we don't need to do anything for gameTime in startTransition if we committed to store!
-        setOptimisticPlayers({ type: 'update_players', updates });
         await serverActions.toggleGlobalPause(next);
       });
     },
@@ -407,24 +381,45 @@ export const App: React.FC = () => {
       if (!confirm('Are you sure you want to reset all game time?')) return;
       
       abortPolling();
-      // Reset local store
-      commitLocalUpdate({}, { is_paused: true, game_time: 0, updated_at: 0 });
-      // Reset players (tricky to do partial update for all, better to let server refresh or loop all)
-      // We can loop all optimisticPlayers
+      // Reset local store players
       const updates: Record<string, Partial<Player>> = {};
       optimisticPlayers.forEach(p => {
         updates[p.id] = { total_time: 0, last_shift_started: undefined };
       });
-      commitLocalUpdate(updates);
+      commitLocalUpdate(updates, { is_paused: true, base_game_time: 0, last_resume_time: 0, current_elapsed_time: 0 }); // Use current_elapsed_time for model reset
 
       startTransition(async () => {
         setOptimisticPlayers({ type: 'reset_game' });
         setOptimisticPaused(true);
-        setOptimisticGameTime(-optimisticGameTime); // Reset to 0
         await serverActions.resetGame();
       });
     }
   };
+
+  useEffect(() => {
+    // Start polling immediately
+    startPolling();
+    
+    // Subscribe GameClockModel to store updates
+    const unsubscribeIsPaused = isPausedStore.listen((value) => {
+      gameClockModel.togglePause(value);
+    });
+    const unsubscribeClockSkew = clockSkewStore.listen((value) => {
+      gameClockModel.updateClockSkew(value);
+    });
+    const unsubscribeServerClockState = serverClockState.listen((value) => {
+      gameClockModel.onServerUpdate(value, clockSkewStore.get());
+    });
+
+    return () => {
+      // Unsubscribe listeners on unmount
+      unsubscribeIsPaused();
+      unsubscribeClockSkew();
+      unsubscribeServerClockState();
+      gameClockModel.destroy(); // Destroy model to clear intervals
+    };
+  }, []); // Run once on mount
+
 
   const handleDragStart = (event: DragStartEvent) => {
     const player = optimisticPlayers.find(p => p.id === event.active.id);
@@ -455,7 +450,7 @@ export const App: React.FC = () => {
   }
 
   return (
-    <GameContext.Provider value={{ players: optimisticPlayers, isPaused: optimisticPaused, gameTime: optimisticGameTime, updatedAt: serverUpdatedAt, clockSkew: serverClockSkew, actions: gameActions }}>
+    <GameContext.Provider value={{ players: optimisticPlayers, isPaused: optimisticPaused, gameClockModel: gameClockModel, actions: gameActions }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className={`flex flex-col select-none ${isPending ? 'cursor-progress' : ''}`}>
                   <GlobalControls />

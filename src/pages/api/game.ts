@@ -13,42 +13,55 @@ export const GET: APIRoute = async ({ locals, url }) => {
     const start = Date.now();
     const timeout = 20000; // 20 seconds long-poll
 
-    while (Date.now() - start < timeout) {
-      // If we are polling (since > 0), check timestamp first
+    while (Date.now() / 1000 - start / 1000 < timeout / 1000) { // Compare in seconds
       if (since > 0) {
         const currentTs = await repo.getGameTimestamp();
         if (currentTs <= since) {
-          // No update yet, wait 500ms
           await new Promise(r => setTimeout(r, 500));
           continue;
         }
       }
 
-      // If we are here, either it's a fresh request (since=0) or we found an update
-      const [players, gameState] = await Promise.all([
-        repo.getAllPlayers(),
-        repo.getGameState()
-      ]);
-      return new Response(JSON.stringify({ players, gameState, serverTime: Date.now() / 1000 }), {
+      const gameState = await repo.getGameState(); // Fetches and calculates current_elapsed_time
+      const players = await repo.getAllPlayers();
+      return new Response(JSON.stringify({ 
+        players, 
+        gameState: {
+          is_paused: gameState.is_paused,
+          base_game_time: gameState.base_game_time,
+          last_resume_time: gameState.last_resume_time,
+          updated_at: gameState.updated_at,
+          current_elapsed_time: gameState.current_elapsed_time // Return calculated elapsed time
+        }, 
+        serverTime: Date.now() / 1000 
+      }), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
     // Timeout reached
-    const [players, gameState] = await Promise.all([
-      repo.getAllPlayers(),
-      repo.getGameState()
-    ]);
-    return new Response(JSON.stringify({ players, gameState, serverTime: Date.now() / 1000 }), {
+    const gameState = await repo.getGameState();
+    const players = await repo.getAllPlayers();
+    return new Response(JSON.stringify({ 
+      players, 
+      gameState: {
+        is_paused: gameState.is_paused,
+        base_game_time: gameState.base_game_time,
+        last_resume_time: gameState.last_resume_time,
+        updated_at: gameState.updated_at,
+        current_elapsed_time: gameState.current_elapsed_time
+      }, 
+      serverTime: Date.now() / 1000 
+    }), {
       headers: { 'Content-Type': 'application/json' }
     });
 
-  } catch (e) {
-    // Fallback if DB is not initialized locally
-    return new Response(JSON.stringify({ players: [], gameState: { is_paused: 1, game_time: 0, updated_at: 0 }, serverTime: Date.now() / 1000 }), { status: 200 });
-  }
-};
-
+    } catch (e) {
+      console.error('API Error:', e);
+      // Fallback if DB is not initialized locally
+      return new Response(JSON.stringify({ players: [], gameState: { is_paused: 1, base_game_time: 0, last_resume_time: 0, updated_at: 0, current_elapsed_time: 0 }, serverTime: Date.now() / 1000 }), { status: 200 });
+    }
+  };
 export const POST: APIRoute = async ({ request, locals }) => {
   const { DB } = locals.runtime.env;
   const repo = new GameRepository(DB);
@@ -83,13 +96,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
         await repo.resetGame(now);
         break;
 
-      case API_ACTIONS.SYNC_CLOCK:
-        await repo.syncClock(payload.direction, now);
+      case API_ACTIONS.SYNC_WALL_CLOCK: // New action for direct wall clock sync
+        await repo.syncWallClock(payload.newTime, now);
         break;
     }
 
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, serverTime: Date.now() / 1000 }), { status: 200 });
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: e.message, serverTime: Date.now() / 1000 }), { status: 500 });
   }
 };

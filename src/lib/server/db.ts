@@ -11,13 +11,23 @@ export class GameRepository {
     return result.results || [];
   }
 
-  async getGameState(): Promise<GameState> {
+  async getGameState(): Promise<GameState & { current_elapsed_time?: number }> {
     const result = await this.db.prepare(
       "SELECT * FROM game_state WHERE id = 'active_game'"
     ).first<GameState>();
-    return result || { is_paused: true, game_time: 0, updated_at: 0 };
+    
+    if (!result) return { is_paused: true, base_game_time: 0, last_resume_time: 0, updated_at: 0, current_elapsed_time: 0 };
+    
+    // Calculate current_elapsed_time
+    let current_elapsed_time = result.base_game_time;
+    if (!result.is_paused) {
+      current_elapsed_time += (Math.floor(Date.now() / 1000) - result.last_resume_time);
+    }
+
+    return { ...result, current_elapsed_time };
   }
 
+  // Used for long-polling check
   async getGameTimestamp(): Promise<number> {
     const result = await this.db.prepare(
       "SELECT updated_at FROM game_state WHERE id = 'active_game'"
@@ -33,7 +43,6 @@ export class GameRepository {
   }
 
   async updatePlayer(id: string, updates: Partial<Player>) {
-    // Dynamically build update query
     const keys = Object.keys(updates).filter(k => k !== 'id');
     if (keys.length === 0) return;
 
@@ -56,7 +65,6 @@ export class GameRepository {
       return val === undefined ? null : val;
     });
 
-    // Always update updated_at
     const query = keys.length > 0 
       ? `UPDATE game_state SET ${setClause}, updated_at = ? WHERE id = 'active_game'`
       : `UPDATE game_state SET updated_at = ? WHERE id = 'active_game'`;
@@ -67,7 +75,7 @@ export class GameRepository {
   async resetGame(now: number) {
     await this.db.prepare("UPDATE players SET total_time = 0, last_shift_started = NULL").run();
     await this.db.prepare(
-      "UPDATE game_state SET is_paused = 1, game_time = 0, updated_at = ? WHERE id = 'active_game'"
+      "UPDATE game_state SET is_paused = 1, base_game_time = 0, last_resume_time = 0, updated_at = ? WHERE id = 'active_game'"
     ).bind(now).run();
   }
 
@@ -79,7 +87,6 @@ export class GameRepository {
       const p = players[i];
       if (p.queue_order !== i) {
         let lastShiftStarted = p.last_shift_started;
-        // If moving TO 0 (On Ice) and game is active, start clock
         if (i === 0 && lane < 6 && !gameState.is_paused) {
            lastShiftStarted = now;
         }
@@ -90,33 +97,26 @@ export class GameRepository {
     }
   }
 
-  async syncClock(direction: 'up' | 'down', now: number) {
+  async syncWallClock(newElapsedTime: number, now: number) {
     const gameState = await this.getGameState();
+
+    // If game is paused, newElapsedTime is just the accumulated base
+    let newBaseTime = newElapsedTime;
     
-    // Calculate current total time
-    let totalTime = gameState.game_time;
+    // If game is active, newElapsedTime = base + (now - resume).
+    // So base = newElapsedTime - (now - resume).
+    // BUT, we can also just shift the `last_resume_time` or shift `base_game_time`.
+    // Shifting `base_game_time` is cleaner because `last_resume_time` usually marks the actual event.
+    // However, if we shift `base_game_time`, we must respect the current `last_resume_time`.
+    
     if (!gameState.is_paused) {
-      totalTime += (now - gameState.updated_at);
+      // elapsed = base + (now - resume)
+      // new_elapsed = new_base + (now - resume)
+      // new_base = new_elapsed - (now - resume)
+      newBaseTime = newElapsedTime - (now - gameState.last_resume_time);
     }
 
-    const seconds = totalTime % 60;
-    let delta = 0;
-
-    if (direction === 'down') {
-      // Snap down to previous minute
-      delta = seconds === 0 ? -60 : -seconds;
-    } else {
-      // Snap up to next minute
-      delta = seconds === 0 ? 60 : (60 - seconds);
-    }
-
-    // Apply delta to game_time (base offset)
-    // Ensure we don't go negative total time
-    if (totalTime + delta < 0) {
-      delta = -totalTime;
-    }
-
-    await this.updateGameState({ game_time: gameState.game_time + delta }, now);
+    await this.updateGameState({ base_game_time: newBaseTime }, now);
   }
 
   async moveLane(id: string, lane: number, now: number) {
@@ -125,19 +125,16 @@ export class GameRepository {
 
     const gameState = await this.getGameState();
 
-    // Finalize time if active
     let newTotalTime = player.total_time;
     if (player.last_shift_started && !gameState.is_paused) {
       newTotalTime += (now - player.last_shift_started);
     }
 
-    // Determine new order (append to end)
     const maxOrderResult = await this.db.prepare(
       "SELECT MAX(queue_order) as maxOrder FROM players WHERE lane = ?"
     ).bind(lane).first<{ maxOrder: number }>();
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
-    // Check if moving to On Ice immediately (empty lane)
     let lastShiftStarted = null;
     if (nextOrder === 0 && lane < 6 && !gameState.is_paused) {
       lastShiftStarted = now;
@@ -147,21 +144,10 @@ export class GameRepository {
       "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, last_shift_started = ? WHERE id = ?"
     ).bind(lane, nextOrder, newTotalTime, lastShiftStarted, id).run();
 
-    // Re-index the OLD lane to close gaps and promote next player to On Ice
     if (player.lane !== lane || nextOrder !== player.queue_order) {
        await this.normalizeLane(player.lane, now);
     }
     
-    // If we moved within the same lane (drag to back), the normalizeLane above handles the gap.
-    // Wait, if I moved to same lane, I appended to end (e.g. from 0 to 5).
-    // The gap is at 0.
-    // normalizeLane(lane) will see:
-    // Old 1 -> New 0. (Starts clock).
-    // Old 2 -> New 1.
-    // ...
-    // The moved player is at 5. It stays at 5 (matches i=5).
-    // This seems correct.
-
     await this.updateGameState({}, now);
   }
 
@@ -172,26 +158,21 @@ export class GameRepository {
     const gameState = await this.getGameState();
     const currentOnIce = players[0];
 
-    // 1. Finalize time for the player coming OFF
     if (currentOnIce) {
       let newTotalTime = currentOnIce.total_time;
       if (currentOnIce.last_shift_started && !gameState.is_paused) {
         newTotalTime += (now - currentOnIce.last_shift_started);
       }
-      // Move to back
       await this.updatePlayer(currentOnIce.id, {
         queue_order: players.length - 1,
         total_time: newTotalTime,
-        last_shift_started: undefined // Will be converted to null
+        last_shift_started: undefined 
       });
     }
 
-    // 2. Shift everyone else up
     for (let i = 1; i < players.length; i++) {
       const p = players[i];
       const newOrder = p.queue_order - 1;
-      
-      // If moving to 0 and game is active, start shift
       const lastShiftStarted = (newOrder === 0 && !gameState.is_paused) ? now : null;
 
       await this.db.prepare(
@@ -207,7 +188,7 @@ export class GameRepository {
     if (gameState.is_paused === isPaused) return;
 
     if (isPaused) {
-      // Pausing: Finalize time for all active players AND game clock
+      // Pausing
       const onIcePlayersResult = await this.db.prepare(
         "SELECT * FROM players WHERE queue_order = 0 AND lane < 6"
       ).all<Player>();
@@ -221,18 +202,19 @@ export class GameRepository {
         }
       }
 
-      // Update game clock
-      const sessionDuration = now - gameState.updated_at;
-      await this.updateGameState({ is_paused: true, game_time: gameState.game_time + sessionDuration }, now);
+      // Update game clock: Add duration of current segment to base
+      // duration = now - last_resume_time
+      const sessionDuration = now - gameState.last_resume_time;
+      await this.updateGameState({ is_paused: true, base_game_time: gameState.base_game_time + sessionDuration }, now);
 
     } else {
-      // Resuming: Start clock for all active players
+      // Resuming
       await this.db.prepare(
         "UPDATE players SET last_shift_started = ? WHERE queue_order = 0 AND lane < 6"
       ).bind(now).run();
       
-      // Update state (sets updated_at to now, which becomes the new start time)
-      await this.updateGameState({ is_paused: false }, now);
+      // Update state: Set last_resume_time to now. base_game_time stays same.
+      await this.updateGameState({ is_paused: false, last_resume_time: now }, now);
     }
   }
 }

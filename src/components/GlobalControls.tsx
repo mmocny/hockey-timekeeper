@@ -1,27 +1,13 @@
-import React, { use, useState, useEffect } from 'react';
+import React, { use } from 'react';
+import { useStore } from '@nanostores/react';
 import { GameContext } from '../lib/client/context';
 import { RefreshCcw, Clock, Plus, Minus } from 'lucide-react';
 
 const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
 export const GlobalControls: React.FC = () => {
-  const { isPaused, gameTime, updatedAt, clockSkew, actions } = use(GameContext)!;
-  const [now, setNow] = useState(Date.now() / 1000);
-
-  useEffect(() => {
-    // Update more frequently for smooth second ticks if needed, but 1s is fine for display
-    const interval = setInterval(() => {
-      setNow(Date.now() / 1000);
-    }, 200); // 200ms to avoid skipping seconds visually due to drift
-    return () => clearInterval(interval);
-  }, []);
-
-  // If paused, time is static gameTime.
-  // If active, time is gameTime + (adjustedNow - last_start_time).
-  // adjustedNow = ClientNow - Skew.
-  // updated_at is Server Time.
-  const adjustedNow = now - clockSkew;
-  const totalTime = isPaused ? gameTime : gameTime + Math.max(0, adjustedNow - updatedAt);
+  const { isPaused, gameClockModel, actions } = use(GameContext)!;
+  const currentDisplayTime = useStore(gameClockModel.currentDisplayTime);
 
   return (
     <div className="flex gap-3 mb-4">
@@ -44,7 +30,7 @@ export const GlobalControls: React.FC = () => {
         >
           <Clock className={`w-8 h-8 fill-current ${!isPaused ? 'animate-pulse' : ''}`} />
           <span className="text-3xl font-mono font-black tracking-widest leading-none">
-            {formatTime(Math.round(totalTime))}
+            {formatTime(currentDisplayTime)}
           </span>
         </button>
 

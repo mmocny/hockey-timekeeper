@@ -16,7 +16,8 @@ CREATE TABLE players (
 CREATE TABLE game_state (
   id TEXT PRIMARY KEY,
   is_paused BOOLEAN DEFAULT 1,
-  game_time INTEGER DEFAULT 0,
+  base_game_time INTEGER DEFAULT 0,
+  last_resume_time INTEGER DEFAULT 0,
   updated_at INTEGER
 );
 
@@ -38,5 +39,5 @@ INSERT INTO players (id, name, number, lane, queue_order, last_shift_started) VA
 ('13', 'Naawakmig', '17', 6, 2, NULL),
 ('14', 'Maajiikwis', '18', 6, 3, NULL);
 
-INSERT INTO game_state (id, is_paused, game_time, updated_at) VALUES 
-('active_game', 1, 0, strftime('%s', 'now'));
+INSERT INTO game_state (id, is_paused, base_game_time, last_resume_time, updated_at) VALUES 
+('active_game', 1, 0, 0, strftime('%s', 'now'));
