@@ -23,7 +23,7 @@ export const ActivePlayerCard: React.FC<Props> = ({ player }) => {
     <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 bg-blue-600 border-blue-400 text-white shadow-md">
       <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
           <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
-          <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
+          <span className="text-sm font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
         </div>
         
         <div className="flex flex-col items-end shrink-0 ml-1 pointer-events-none border-l border-white/10 pl-2">
@@ -44,7 +44,7 @@ export const InactivePlayerCard: React.FC<Props> = ({ player }) => (
   <div className="relative flex items-center justify-between p-2.5 min-h-[48px] rounded-md border transition-all touch-none select-none w-36 bg-slate-900 border-slate-800 text-slate-300">
     <div className="flex flex-col overflow-hidden pointer-events-none pr-1">
       <span className="text-[10px] font-black italic leading-none opacity-60 mb-1 tracking-tighter">#{player.number}</span>
-      <span className="text-[12px] font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
+      <span className="text-sm font-bold truncate leading-none uppercase tracking-tight">{player.name}</span>
     </div>
     
     <div className="flex flex-col items-end shrink-0 ml-1 pointer-events-none border-l border-white/10 pl-2">

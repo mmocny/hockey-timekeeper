@@ -24,7 +24,7 @@ export const Stats: React.FC<Props> = ({ players }) => {
 
   return (
     <section className="mt-2 px-2">
-      <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-4 border-b border-slate-900 pb-2">
+      <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 border-b border-slate-900 pb-2">
         Ice Time Leaderboard
       </h2>
       <div className="grid grid-cols-2 gap-x-8 gap-y-2">

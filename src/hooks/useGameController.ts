@@ -217,30 +217,66 @@ export function useGameController() {
 
     moveLane: (id: string, lane: number) => {
       const gameTime = gameClockModel.getCurrentElapsed();
-      const targetLanePlayers = optimisticPlayers.filter(p => p.lane === lane);
-      const nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
       
+      const updates: Record<string, Partial<Player>> = {};
+      const serverCalls: Promise<void>[] = [];
+
+      // 1. Handle Goalie Replacement (if moving INTO lane 5)
+      if (lane === 5) {
+        const existingGoalie = optimisticPlayers.find(p => p.lane === 5 && p.id !== id);
+        if (existingGoalie) {
+           const benchPlayers = optimisticPlayers.filter(p => p.lane === 6);
+           const nextBenchOrder = benchPlayers.length > 0 ? Math.max(...benchPlayers.map(p => p.queue_order)) + 1 : 0;
+           
+           let newTotal = existingGoalie.total_time;
+           if (existingGoalie.last_shift_started !== undefined) {
+             newTotal += (gameTime - existingGoalie.last_shift_started);
+           }
+
+           updates[existingGoalie.id] = {
+             lane: 6,
+             queue_order: nextBenchOrder,
+             total_time: newTotal,
+             last_shift_started: undefined
+           };
+           
+           serverCalls.push(serverActions.moveLane(existingGoalie.id, 6));
+        }
+      }
+
+      // 2. Handle Moving Player
+      const targetLanePlayers = optimisticPlayers.filter(p => p.lane === lane);
+      
+      let nextOrder = 0;
+      if (lane === 5) {
+        nextOrder = 0; 
+      } else {
+        nextOrder = targetLanePlayers.length > 0 ? Math.max(...targetLanePlayers.map(p => p.queue_order)) + 1 : 0;
+      }
+
       const player = optimisticPlayers.find(p => p.id === id);
       let newTotal = player?.total_time || 0;
       if (player?.last_shift_started !== undefined) {
          newTotal += (gameTime - player.last_shift_started);
       }
 
-      const updates: Record<string, Partial<Player>> = {
-        [id]: { 
-          lane, 
-          queue_order: nextOrder, 
-          total_time: newTotal,
-          last_shift_started: (nextOrder === 0 && lane < 6) ? gameTime : undefined 
-        }
+      updates[id] = { 
+        lane, 
+        queue_order: nextOrder, 
+        total_time: newTotal,
+        last_shift_started: (nextOrder === 0 && lane < 6) ? gameTime : undefined 
       };
+      
+      serverCalls.push(serverActions.moveLane(id, lane));
 
       abortPolling();
       commitLocalCacheUpdate(updates, {}, gameClockModel);
 
       startTransition(async () => {
         setOptimisticPlayers({ type: 'update_players', updates });
-        await serverActions.moveLane(id, lane);
+        for (const call of serverCalls) {
+            await call;
+        }
       });
     },
 

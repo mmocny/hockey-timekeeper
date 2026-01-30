@@ -23,7 +23,7 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
   const tail = lanePlayers.slice(2);
 
   return (
-    <DroppableLane laneId={laneIdx} className="py-1.5 border-b border-slate-900 last:border-0 cursor-pointer">
+    <DroppableLane laneId={laneIdx} className={`py-1.5 border-b border-slate-900 last:border-0 ${laneIdx !== 5 ? 'cursor-pointer' : ''}`}>
       {({ isOver }) => {
         const showOnIcePlaceholder = isOver && lanePlayers.length === 0;
         const showOnDeckPlaceholder = isOver && lanePlayers.length === 1;
@@ -31,14 +31,14 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
 
         return (
           <div 
-            onClick={() => actions.switchLane(laneIdx)}
+            onClick={() => laneIdx !== 5 && actions.switchLane(laneIdx)}
           >
             <div className="flex items-center gap-2 mb-1.5 px-1">
-              <span className="text-[9px] font-black uppercase text-slate-600 tracking-widest">{LANE_NAMES[laneIdx]}</span>
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{LANE_NAMES[laneIdx]}</span>
               <div className="h-px bg-slate-900 flex-1"></div>
             </div>
 
-            <div className="flex items-center gap-2 min-h-[44px] px-1 overflow-hidden">
+            <div className="flex items-center gap-2 min-h-[44px] px-1">
               <div className="w-36 shrink-0">
                 {onIce ? (
                   <DraggablePlayer id={onIce.id}>
@@ -53,7 +53,7 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
 
               <ChevronRight className="w-3 h-3 text-slate-800 shrink-0" />
 
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar flex-1 items-center">
+              <div className="flex gap-1.5 flex-1 items-center">
                 {/* On Deck Slot */}
                 <div className="shrink-0">
                   {onDeck ? (
@@ -93,48 +93,16 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
 const Bench: React.FC = () => {
   const { players, actions } = use(GameContext)!;
   const benchPlayers = players
-    .filter(p => p.lane === 6)
+    .filter(p => p.lane === 6 || p.lane === 7)
     .sort((a, b) => a.queue_order - b.queue_order);
 
   return (
-    <section className="mt-4">
-      <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-2">Bench / Unassigned</h2>
+    <section className="mt-2">
+      <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-3 px-2">Bench / Absent</h2>
       <DroppableLane laneId={6} className="p-2 min-h-[100px] border border-slate-900 border-dashed bg-slate-950/30 rounded-lg">
         {({ isOver }) => (
           <div className="flex flex-wrap gap-2">
             {benchPlayers.map(p => (
-              <DraggablePlayer key={p.id} id={p.id}>
-                <div 
-                  onClick={() => {
-                    const lane = prompt('Assign to lane (0:C, 1:LW, 2:RW, 3:LD, 4:RD, 5:G, 7:Absent)?');
-                    if (lane !== null) actions.moveLane(p.id, parseInt(lane));
-                  }}
-                >
-                  <InactivePlayerCard player={p} />
-                </div>
-              </DraggablePlayer>            ))}
-            {isOver && <DropPlaceholder />}
-            {!isOver && benchPlayers.length === 0 && <span className="text-[10px] font-bold text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
-          </div>
-        )}
-      </DroppableLane>
-    </section>
-  );
-};
-
-const Absent: React.FC = () => {
-  const { players, actions } = use(GameContext)!;
-  const absentPlayers = players
-    .filter(p => p.lane === 7)
-    .sort((a, b) => a.queue_order - b.queue_order);
-
-  return (
-    <section className="mt-4 opacity-60 hover:opacity-100 transition-opacity">
-      <h2 className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-600 mb-3 px-2">Absent / Scratched</h2>
-      <DroppableLane laneId={7} className="p-2 min-h-[80px] border border-slate-900 border-dashed bg-slate-950/20 rounded-lg">
-        {({ isOver }) => (
-          <div className="flex flex-wrap gap-2">
-            {absentPlayers.map(p => (
               <DraggablePlayer key={p.id} id={p.id}>
                 <div 
                   onClick={() => {
@@ -144,10 +112,9 @@ const Absent: React.FC = () => {
                 >
                   <InactivePlayerCard player={p} />
                 </div>
-              </DraggablePlayer>
-            ))}
+              </DraggablePlayer>            ))}
             {isOver && <DropPlaceholder />}
-            {!isOver && absentPlayers.length === 0 && <span className="text-[10px] font-bold text-slate-700 font-bold uppercase p-2">No Absent Players</span>}
+            {!isOver && benchPlayers.length === 0 && <span className="text-[10px] font-bold text-slate-700 font-bold uppercase p-2">Bench Empty</span>}
           </div>
         )}
       </DroppableLane>
@@ -209,14 +176,15 @@ export const GameLayout: React.FC<{ isPending: boolean, isLoading: boolean }> = 
       <div className={`flex flex-col select-none ${isPending ? 'cursor-progress' : ''}`}>
         <GlobalControls />
         
-        <div className="space-y-1">
-          {[0, 1, 2, 3, 4, 5].map(idx => (
-            <LaneRow key={idx} laneIdx={idx} />
-          ))}
+        <div className="overflow-x-auto pb-2 mb-2">
+          <div className="space-y-1 min-w-full w-max">
+            {[0, 1, 2, 3, 4, 5].map(idx => (
+              <LaneRow key={idx} laneIdx={idx} />
+            ))}
+          </div>
         </div>
 
         <Bench />
-        <Absent />
 
         <Stats players={players} isPaused={false} />
 
