@@ -111,13 +111,19 @@ export class GameClockModel {
     }
 
     // Update local clock state with server's authoritative values
+    const wasPaused = this._localIsPaused;
     this._localIsPaused = serverState.is_paused;
     
     // Smooth adjustment: Only snap if server time drifts significantly from local display
+    // OR if pause state changed (to ensure we anchor correctly on resume/pause)
     const currentLocalDisplayedTime = this.currentDisplayTime.get();
-    if (Math.abs(serverState.current_elapsed_time - currentLocalDisplayedTime) > 1 || serverState.is_paused !== this._localIsPaused) {
+    if (Math.abs(serverState.current_elapsed_time - currentLocalDisplayedTime) > 1 || serverState.is_paused !== wasPaused) {
       this._localBaseTime = serverState.current_elapsed_time;
-      this._localLastResumeTime = this.getAdjustedNow(); // Always reset start time to current adjusted now if changing base
+      // If running, we anchor the start time to NOW, so that:
+      // Display = Base (from server) + (Now - Anchor) = Base + 0 = ServerTime
+      if (!this._localIsPaused) {
+        this._localLastResumeTime = this.getAdjustedNow(); 
+      }
     }
 
     this.updateDisplayTime();
