@@ -80,7 +80,7 @@ export class GameRepository {
   }
 
   async resetGame(now: number) {
-    await this.db.prepare("UPDATE players SET total_time = 0, last_shift_started = NULL").run();
+    await this.db.prepare("UPDATE players SET total_time = 0, total_penalty_time = 0, last_shift_started = NULL").run();
     await this.db.prepare(
       "UPDATE game_state SET is_paused = 1, base_game_time = 0, last_resume_time = 0, updated_at = ? WHERE id = 'active_game'"
     ).bind(now).run();
@@ -93,15 +93,24 @@ export class GameRepository {
 
     for (let i = 0; i < players.length; i++) {
       const p = players[i];
-      if (p.queue_order !== i) {
-        let lastShiftStarted = p.last_shift_started;
-        if (i === 0 && lane < 6) {
-           // If becoming active (0), set start time to current GAME time if not already set?
-           // Actually, if we are normalizing, we assume shift starts NOW if it wasn't already active?
-           // This is tricky. normalizeLane usually runs after a move.
-           // If moved to pos 0, shift starts.
-           lastShiftStarted = gameTime;
-        }
+      // Force all penalty box players to be active
+      const isActive = (i === 0 && lane < 6) || (lane === 8);
+      
+      let lastShiftStarted = p.last_shift_started;
+      if (isActive) {
+         // If becoming active and wasn't before (or just to be safe), set start time.
+         // For existing active players, we usually preserve start time.
+         // But if we are re-normalizing, we might be correcting order.
+         // If `lastShiftStarted` is null and should be active, set it.
+         if (lastShiftStarted === null || lastShiftStarted === undefined) {
+            lastShiftStarted = gameTime;
+         }
+      } else {
+         lastShiftStarted = null;
+      }
+
+      // If order changed or status changed, update
+      if (p.queue_order !== i || p.last_shift_started !== lastShiftStarted) {
         await this.db.prepare(
           "UPDATE players SET queue_order = ?, last_shift_started = ? WHERE id = ?"
         ).bind(i, lastShiftStarted, p.id).run();
@@ -139,9 +148,17 @@ export class GameRepository {
     const gameState = await this.getGameState();
     const gameTime = this._calculateGameTime(gameState, now);
 
-    let newTotalTime = player.total_time;
+    let nextTotalTime = player.total_time;
+    let nextTotalPenalty = player.total_penalty_time || 0;
+
+    // If player was active, calculate elapsed and add to appropriate bucket
     if (player.last_shift_started !== null && player.last_shift_started !== undefined) {
-      newTotalTime += (gameTime - player.last_shift_started);
+      const elapsed = gameTime - player.last_shift_started;
+      if (player.lane === 8) {
+        nextTotalPenalty += elapsed;
+      } else {
+        nextTotalTime += elapsed;
+      }
     }
 
     const maxOrderResult = await this.db.prepare(
@@ -149,17 +166,25 @@ export class GameRepository {
     ).bind(lane).first<{ maxOrder: number }>();
     const nextOrder = (maxOrderResult?.maxOrder ?? -1) + 1;
     
-    let lastShiftStarted = null;
-    if (nextOrder === 0 && lane < 6) {
-      lastShiftStarted = gameTime;
-    }
+    // Determine if player will be active in new lane
+    // Lane 8 (Penalty) is always active. Lanes 0-5 are active if order 0.
+    const isActive = (nextOrder === 0 && lane < 6) || (lane === 8);
+    const lastShiftStarted = isActive ? gameTime : null;
 
     await this.db.prepare(
-      "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, last_shift_started = ? WHERE id = ?"
-    ).bind(lane, nextOrder, newTotalTime, lastShiftStarted, id).run();
+      "UPDATE players SET lane = ?, queue_order = ?, total_time = ?, total_penalty_time = ?, last_shift_started = ? WHERE id = ?"
+    ).bind(lane, nextOrder, nextTotalTime, nextTotalPenalty, lastShiftStarted, id).run();
 
     if (player.lane !== lane || nextOrder !== player.queue_order) {
        await this.normalizeLane(player.lane, now);
+       // Also normalize target lane to ensure consistency? 
+       // `normalizeLane(lane, now)` might be redundant if we just appended, but safe.
+       // Actually `nextOrder` is append, so order is fine. But let's be safe.
+       if (player.lane === 8 || lane === 8) {
+          // If we moved out of or into penalty, normalize might be needed to trigger logic for others?
+          // Not strictly for "others" unless "others" change status.
+          // But `normalizeLane` handles `isActive` logic for everyone.
+       }
     }
     
     await this.updateGameState({}, now);

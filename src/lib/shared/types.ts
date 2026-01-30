@@ -5,6 +5,7 @@ export interface Player {
   lane: number;
   queue_order: number;
   total_time: number;
+  total_penalty_time: number;
   last_shift_started?: number;
 }
 
@@ -29,4 +30,4 @@ export const API_ACTIONS = {
   SYNC_WALL_CLOCK: 'sync_wall_clock',
 } as const;
 
-export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench', 'Absent'];
+export const LANE_NAMES = ['Center', 'Left Wing', 'Right Wing', 'Left Def', 'Right Def', 'Goalie', 'Bench', 'Absent', 'Penalty'];

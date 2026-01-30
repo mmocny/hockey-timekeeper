@@ -22,6 +22,58 @@ const LaneRow: React.FC<{ laneIdx: number }> = ({ laneIdx }) => {
   const onDeck = lanePlayers[1];
   const tail = lanePlayers.slice(2);
 
+  // Special Layout for Goalie Lane (5) -> Include Penalty Box (8)
+  if (laneIdx === 5) {
+    const penaltyPlayers = players.filter(p => p.lane === 8).sort((a, b) => a.queue_order - b.queue_order);
+    
+    return (
+      <div className="py-1.5 border-b border-slate-900 last:border-0">
+        <div className="flex items-center gap-2 mb-1.5 px-1">
+          <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">GOALIE / PENALTY</span>
+          <div className="h-px bg-slate-900 flex-1"></div>
+        </div>
+
+        <div className="flex items-center gap-2 min-h-[44px] px-1">
+          {/* Goalie Slot (Lane 5) */}
+          <DroppableLane laneId={5} className="w-36 shrink-0 relative">
+            {({ isOver }) => (
+              <>
+                {onIce ? (
+                  <DraggablePlayer id={onIce.id}>
+                    <ActivePlayerCard key={onIce.id} player={onIce} />
+                  </DraggablePlayer>
+                ) : isOver ? (
+                  <DropPlaceholder />
+                ) : (
+                  <div><EmptyPlayerCard type="active" /></div>
+                )}
+              </>
+            )}
+          </DroppableLane>
+
+          <div className="w-px h-8 bg-slate-800 shrink-0 mx-2"></div>
+
+          {/* Penalty Box (Lane 8) */}
+          <DroppableLane laneId={8} className="flex gap-1.5 flex-1 items-center min-h-[44px] p-1 rounded border border-slate-900/50 bg-red-950/10">
+            {({ isOver }) => (
+              <>
+                {penaltyPlayers.map(p => (
+                  <DraggablePlayer key={p.id} id={p.id}>
+                    <ActivePlayerCard key={p.id} player={p} />
+                  </DraggablePlayer>
+                ))}
+                {isOver && <DropPlaceholder />}
+                {penaltyPlayers.length === 0 && !isOver && (
+                  <span className="text-[9px] font-bold text-slate-700 uppercase px-2">No Penalties</span>
+                )}
+              </>
+            )}
+          </DroppableLane>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DroppableLane laneId={laneIdx} className={`py-1.5 border-b border-slate-900 last:border-0 ${laneIdx !== 5 ? 'cursor-pointer' : ''}`}>
       {({ isOver }) => {

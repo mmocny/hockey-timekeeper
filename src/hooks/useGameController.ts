@@ -255,16 +255,26 @@ export function useGameController() {
       }
 
       const player = optimisticPlayers.find(p => p.id === id);
-      let newTotal = player?.total_time || 0;
-      if (player?.last_shift_started !== undefined) {
-         newTotal += (gameTime - player.last_shift_started);
+      if (!player) return;
+
+      let nextTotalTime = player.total_time;
+      let nextTotalPenalty = player.total_penalty_time || 0;
+
+      if (player.last_shift_started !== undefined) {
+         const elapsed = gameTime - player.last_shift_started;
+         if (player.lane === 8) {
+            nextTotalPenalty += elapsed;
+         } else {
+            nextTotalTime += elapsed;
+         }
       }
 
       updates[id] = { 
         lane, 
         queue_order: nextOrder, 
-        total_time: newTotal,
-        last_shift_started: (nextOrder === 0 && lane < 6) ? gameTime : undefined 
+        total_time: nextTotalTime,
+        total_penalty_time: nextTotalPenalty,
+        last_shift_started: ((nextOrder === 0 && lane < 6) || lane === 8) ? gameTime : undefined 
       };
       
       serverCalls.push(serverActions.moveLane(id, lane));

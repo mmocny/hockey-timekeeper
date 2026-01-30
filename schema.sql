@@ -10,6 +10,7 @@ CREATE TABLE players (
   lane INTEGER DEFAULT 6, -- 0: C, 1: LW, 2: RW, 3: LD, 4: RD, 5: G, 6: Bench, 7: Absent
   queue_order INTEGER DEFAULT 0, -- 0 is always "On Ice" for lanes 0-5
   total_time INTEGER DEFAULT 0,
+  total_penalty_time INTEGER DEFAULT 0,
   last_shift_started INTEGER
 );
 
